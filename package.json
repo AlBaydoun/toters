@@ -1,0 +1,18 @@
+{
+  "name": "liefero",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Liefero — multi-vertical on-demand delivery marketplace for Germany and the EU",
+  "workspaces": ["packages/*", "services/*", "apps/*"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:api": "npm run dev -w @liefero/api",
+    "dev:mobile": "npm run start -w @liefero/mobile",
+    "db:up": "docker compose -f infra/docker-compose.yml up -d",
+    "db:migrate": "npm run migrate -w @liefero/api",
+    "db:seed": "npm run seed -w @liefero/api"
+  }
+}

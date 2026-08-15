@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.expo/
+.env
+.env.local
+*.log
+coverage/
+.DS_Store
+services/api/prisma/dev.db
+dist-test/

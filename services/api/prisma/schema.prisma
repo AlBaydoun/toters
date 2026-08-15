@@ -1,0 +1,1002 @@
+// Liefero domain model.
+// Conventions:
+//  - All money is INTEGER CENTS, EUR, GROSS (VAT-inclusive). PAngV requires gross
+//    display to consumers; deriving net out of gross avoids a class of rounding bugs.
+//  - Country is a first-class dimension: VAT profile, wage floor, age limits and
+//    deposit scheme all resolve per country.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+// ============================================================================
+// Geography & tenancy
+// ============================================================================
+
+enum CountryCode {
+  DE
+  AT
+  NL
+}
+
+model City {
+  id          String       @id @default(cuid())
+  country     CountryCode
+  name        String
+  slug        String       @unique
+  timezone    String       @default("Europe/Berlin")
+  isLive      Boolean      @default(false)
+  launchedAt  DateTime?
+  zones       DeliveryZone[]
+  merchants   Merchant[]
+  couriers    Courier[]
+  createdAt   DateTime     @default(now())
+
+  @@index([country, isLive])
+}
+
+/// A delivery zone is a polygon. "Which stores serve this address" is a spatial
+/// query (ST_Contains) — doing it in application code is a mistake you make once.
+model DeliveryZone {
+  id                String   @id @default(cuid())
+  cityId            String
+  city              City     @relation(fields: [cityId], references: [id])
+  name              String
+  /// WKT polygon, SRID 4326. Queried via raw PostGIS.
+  boundaryWkt       String
+  /// Base delivery fee for this zone, gross cents.
+  baseDeliveryFee   Int      @default(349)
+  /// Free-delivery basket threshold, gross cents. Null = never free.
+  freeDeliveryAbove Int?
+  minimumBasket     Int      @default(1000)
+  isActive          Boolean  @default(true)
+  merchants         Merchant[]
+  createdAt         DateTime @default(now())
+
+  @@index([cityId, isActive])
+}
+
+// ============================================================================
+// Customers
+// ============================================================================
+
+enum Locale {
+  de
+  en
+  tr
+  ar
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String?   @unique
+  phone             String?   @unique
+  emailVerifiedAt   DateTime?
+  phoneVerifiedAt   DateTime?
+  passwordHash      String?
+  firstName         String?
+  lastName          String?
+  locale            Locale    @default(de)
+  /// Self-declared DOB, used to pre-gate age-restricted baskets. The binding
+  /// check is always the courier's physical ID verification at handover.
+  dateOfBirth       DateTime?
+  /// Platform credit ("Guthaben"), gross cents. Grocery refunds land here.
+  creditBalance     Int       @default(0)
+  status            UserStatus @default(ACTIVE)
+
+  // GDPR
+  anonymisedAt      DateTime?
+  deletionRequestedAt DateTime?
+
+  addresses         Address[]
+  orders            Order[]
+  carts             Cart[]
+  paymentMethods    PaymentMethod[]
+  consents          ConsentRecord[]
+  dataRequests      DataRequest[]
+  loyaltyAccount    LoyaltyAccount?
+  punchCards        PunchCard[]
+  promoRedemptions  PromoRedemption[]
+  reviews           Review[]
+  devices           Device[]
+  creditEntries     CreditEntry[]
+  refreshTokens     RefreshToken[]
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([status])
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+/// Structured German addressing. Unlike map-pin markets, the street address is the
+/// source of truth and the geo pin is a refinement — not the other way round.
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label         String?
+  street        String
+  houseNumber   String
+  addressLine2  String?
+  /// German apartment blocks need these or the courier cannot complete.
+  floor         String?
+  entryCode     String?
+  careOf        String?
+  postalCode    String
+  city          String
+  country       CountryCode @default(DE)
+  latitude      Float
+  longitude     Float
+  /// Free-text note to the courier ("Hinterhof, zweiter Eingang").
+  deliveryNote  String?
+  isDefault     Boolean  @default(false)
+  orders        Order[]
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([postalCode])
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OtpChallenge {
+  id          String   @id @default(cuid())
+  destination String
+  channel     String
+  codeHash    String
+  attempts    Int      @default(0)
+  consumedAt  DateTime?
+  /// Retention: 15 minutes. Swept by the retention job.
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([destination])
+}
+
+model Device {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pushToken    String   @unique
+  platform     String
+  appVersion   String?
+  lastSeenAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ============================================================================
+// Merchants
+// ============================================================================
+
+enum MerchantType {
+  RESTAURANT
+  CAFE
+  GROCERY
+  PHARMACY
+  RETAIL
+  CONVENIENCE
+  DARK_STORE
+}
+
+enum MerchantStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  PAUSED
+  SUSPENDED
+}
+
+model Merchant {
+  id              String         @id @default(cuid())
+  slug            String         @unique
+  name            String
+  type            MerchantType
+  description     String?
+  logoUrl         String?
+  coverUrl        String?
+  status          MerchantStatus @default(PENDING_VERIFICATION)
+
+  cityId          String
+  city            City           @relation(fields: [cityId], references: [id])
+  zoneId          String?
+  zone            DeliveryZone?  @relation(fields: [zoneId], references: [id])
+
+  street          String
+  houseNumber     String
+  postalCode      String
+  addressCity     String
+  country         CountryCode    @default(DE)
+  latitude        Float
+  longitude       Float
+
+  // --- DSA Art. 30 trader traceability. Non-nullable by design: a merchant
+  // --- cannot go live without these.
+  legalName       String
+  legalAddress    String
+  registrationNo  String         // Handelsregisternummer
+  vatId           String         // USt-IdNr.
+  contactEmail    String
+  contactPhone    String
+  verifiedAt      DateTime?
+
+  /// Commission in basis points (2000 = 20%).
+  commissionBps   Int            @default(2000)
+  /// Rolling prep-time estimate in seconds. Restaurants and grocery differ wildly;
+  /// a global constant is the top cause of couriers idling at counters.
+  avgPrepSeconds  Int            @default(900)
+  minimumBasket   Int?
+  ratingAvg       Float          @default(0)
+  ratingCount     Int            @default(0)
+
+  openingHours    OpeningHours[]
+  categories      Category[]
+  products        Product[]
+  orders          Order[]
+  reviews         Review[]
+  punchCards      PunchCard[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([cityId, status])
+  @@index([type, status])
+}
+
+model OpeningHours {
+  id         String   @id @default(cuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  /// 0 = Monday .. 6 = Sunday (ISO, matching German convention)
+  weekday    Int
+  opensAt    String   // "09:00"
+  closesAt   String   // "22:30"
+
+  @@index([merchantId, weekday])
+}
+
+// ============================================================================
+// Catalog
+// ============================================================================
+
+/// The 14 allergens declared by EU 1169/2011 (LMIV). An enum, not free text, so
+/// they are filterable and translatable.
+enum Allergen {
+  GLUTEN
+  CRUSTACEANS
+  EGGS
+  FISH
+  PEANUTS
+  SOYBEANS
+  MILK
+  NUTS
+  CELERY
+  MUSTARD
+  SESAME
+  SULPHITES
+  LUPIN
+  MOLLUSCS
+}
+
+/// German additive declarations (Zusatzstoff-Kennzeichnung, LMIDV).
+enum Additive {
+  MIT_FARBSTOFF
+  MIT_KONSERVIERUNGSSTOFF
+  MIT_ANTIOXIDATIONSMITTEL
+  MIT_GESCHMACKSVERSTAERKER
+  GESCHWEFELT
+  GESCHWAERZT
+  GEWACHST
+  MIT_PHOSPHAT
+  MIT_SUESSUNGSMITTEL
+  KOFFEINHALTIG
+  CHININHALTIG
+}
+
+enum VatCategory {
+  FOOD_REDUCED      // 7%  — groceries, delivered prepared food
+  BEVERAGE_STANDARD // 19% — soft drinks, beer, wine, spirits, mineral water
+  GOODS_STANDARD    // 19% — retail, electronics, non-food
+  SERVICE_STANDARD  // 19% — service fee
+}
+
+/// Pfand under VerpackG. Amount resolved from the scheme, not stored per product,
+/// so a statutory change is a one-line update.
+enum DepositScheme {
+  NONE
+  ONE_WAY_025      // €0.25 single-use
+  REUSABLE_008     // €0.08
+  REUSABLE_015     // €0.15
+  CRATE_150        // €1.50
+}
+
+model Category {
+  id         String    @id @default(cuid())
+  merchantId String
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name       String
+  nameEn     String?
+  sortOrder  Int       @default(0)
+  products   Product[]
+
+  @@index([merchantId, sortOrder])
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  merchantId     String
+  merchant       Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  categoryId     String?
+  category       Category?     @relation(fields: [categoryId], references: [id])
+
+  name           String
+  nameEn         String?
+  description    String?
+  imageUrl       String?
+  /// Gross price in cents (PAngV: consumers see gross).
+  price          Int
+  /// Struck-through reference price for promos, gross cents.
+  compareAtPrice Int?
+  vatCategory    VatCategory   @default(FOOD_REDUCED)
+
+  // --- PAngV Grundpreis: mandatory unit price for goods sold by weight/volume.
+  /// Content amount in base units (grams or millilitres).
+  contentAmount  Int?
+  /// "g" | "ml" | "kg" | "l" | "piece"
+  contentUnit    String?
+
+  depositScheme  DepositScheme @default(NONE)
+  /// JuSchG: 16 = beer/wine, 18 = spirits/tobacco. Null = unrestricted.
+  minimumAge     Int?
+
+  allergens             Allergen[]
+  additives             Additive[]
+  /// Hard gate: checkout REJECTS food baskets where this is false. Cheaper to
+  /// lose the order than to take a Bußgeld under LMIV.
+  allergenDataComplete  Boolean  @default(false)
+  nutriScore            String?
+
+  isAvailable    Boolean       @default(true)
+  stockCount     Int?
+  optionGroups   OptionGroup[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([merchantId, isAvailable])
+  @@index([categoryId])
+}
+
+model OptionGroup {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String
+  minSelect  Int      @default(0)
+  maxSelect  Int      @default(1)
+  sortOrder  Int      @default(0)
+  options    Option[]
+
+  @@index([productId])
+}
+
+model Option {
+  id            String          @id @default(cuid())
+  groupId       String
+  group         OptionGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  name          String
+  /// Gross price delta in cents; may be negative.
+  priceDelta    Int             @default(0)
+  allergens     Allergen[]
+  isAvailable   Boolean         @default(true)
+  cartItemOpts  CartItemOption[]
+  orderItemOpts OrderItemOption[]
+
+  @@index([groupId])
+}
+
+// ============================================================================
+// Cart
+// ============================================================================
+
+model Cart {
+  id         String     @id @default(cuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId String?
+  items      CartItem[]
+  promoCode  String?
+  updatedAt  DateTime   @updatedAt
+  createdAt  DateTime   @default(now())
+
+  @@index([userId])
+}
+
+model CartItem {
+  id        String           @id @default(cuid())
+  cartId    String
+  cart      Cart             @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product          @relation(fields: [productId], references: [id])
+  quantity  Int              @default(1)
+  note      String?
+  options   CartItemOption[]
+
+  @@index([cartId])
+}
+
+model CartItemOption {
+  id         String   @id @default(cuid())
+  cartItemId String
+  cartItem   CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  optionId   String
+  option     Option   @relation(fields: [optionId], references: [id])
+
+  @@index([cartItemId])
+}
+
+// ============================================================================
+// Orders
+// ============================================================================
+
+enum OrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAYMENT_FAILED
+  AWAITING_MERCHANT
+  REJECTED
+  PREPARING
+  AWAITING_COURIER
+  OUT_FOR_DELIVERY
+  DELIVERED
+  SETTLED
+  CANCELLED
+}
+
+enum OrderType {
+  MARKETPLACE
+  /// The buy-anything errand service: no catalog, no partner merchant.
+  BUTLER
+}
+
+enum FulfilmentMode {
+  ASAP
+  SCHEDULED
+}
+
+model Order {
+  id             String        @id @default(cuid())
+  /// Human-facing reference, e.g. "LF-7Q4M2K".
+  reference      String        @unique
+  type           OrderType     @default(MARKETPLACE)
+  status         OrderStatus   @default(DRAFT)
+
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+  merchantId     String?
+  merchant       Merchant?     @relation(fields: [merchantId], references: [id])
+  addressId      String
+  address        Address       @relation(fields: [addressId], references: [id])
+  courierId      String?
+  courier        Courier?      @relation(fields: [courierId], references: [id])
+
+  fulfilmentMode FulfilmentMode @default(ASAP)
+  /// Start of the booked 1-hour slot for SCHEDULED orders.
+  scheduledFor   DateTime?
+
+  // --- Money. All gross cents. See packages/shared/src/pricing.ts.
+  itemsSubtotal    Int
+  deliveryFee      Int
+  serviceFee       Int
+  depositTotal     Int        @default(0)
+  discountTotal    Int        @default(0)
+  creditApplied    Int        @default(0)
+  tipAmount        Int        @default(0)
+  grandTotal       Int
+  /// Per-rate VAT breakdown, e.g. {"700": 214, "1900": 561}. §14 UStG requires
+  /// rates to be shown separately on the invoice.
+  vatBreakdown     Json
+
+  /// max(item.minimumAge). Drives the courier's ID-check step.
+  requiredAge      Int?
+  ageVerifiedAt    DateTime?
+  ageVerifiedBy    String?
+
+  /// Free-text errand description for BUTLER orders.
+  butlerRequest    String?
+  /// Ceiling the courier may spend on a Butler purchase, gross cents.
+  butlerBudget     Int?
+
+  etaMinutes       Int?
+  placedAt         DateTime?
+  acceptedAt       DateTime?
+  readyAt          DateTime?
+  pickedUpAt       DateTime?
+  deliveredAt      DateTime?
+  cancelledAt      DateTime?
+  cancellationReason String?
+  /// Amount actually charged on cancellation, per the tiered policy.
+  cancellationCharge Int?
+
+  items          OrderItem[]
+  events         OrderEvent[]
+  payments       Payment[]
+  assignments    Assignment[]
+  review         Review?
+  promoRedemption PromoRedemption?
+  creditEntries  CreditEntry[]
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([merchantId, status])
+  @@index([courierId, status])
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id            String            @id @default(cuid())
+  orderId       String
+  order         Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?          @relation(fields: [productId], references: [id])
+  /// Denormalised: the catalog changes, the invoice must not.
+  nameSnapshot  String
+  unitPrice     Int
+  quantity      Int
+  vatCategory   VatCategory
+  depositPerUnit Int              @default(0)
+  lineTotal     Int
+  note          String?
+  /// Grocery substitution flow.
+  substitutedForId String?
+  substitutionStatus String?
+  options       OrderItemOption[]
+
+  @@index([orderId])
+}
+
+model OrderItemOption {
+  id          String    @id @default(cuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  optionId    String?
+  option      Option?   @relation(fields: [optionId], references: [id])
+  nameSnapshot String
+  priceDelta  Int
+
+  @@index([orderItemId])
+}
+
+model OrderEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  actorType String      // CUSTOMER | MERCHANT | COURIER | SYSTEM
+  actorId   String?
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+// ============================================================================
+// Couriers
+// ============================================================================
+
+/// EMPLOYED is the default and the intended model: the EU Platform Work Directive
+/// (2024/2831) creates a rebuttable presumption of employment, and German
+/// Scheinselbstständigkeit doctrine already made contractor fleets risky.
+enum EmploymentType {
+  EMPLOYED_FULL_TIME
+  EMPLOYED_PART_TIME
+  MINIJOB
+}
+
+enum VehicleType {
+  BICYCLE
+  E_BIKE
+  E_SCOOTER
+  CAR
+  ON_FOOT
+}
+
+enum CourierStatus {
+  ONBOARDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model Courier {
+  id             String         @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String         @unique
+  phone          String         @unique
+  cityId         String
+  city           City           @relation(fields: [cityId], references: [id])
+
+  employmentType EmploymentType @default(EMPLOYED_PART_TIME)
+  contractedHoursPerWeek Int    @default(20)
+  /// Reference into payroll; no bank details are stored in this system.
+  payrollRef     String?
+  hourlyRateCents Int           @default(1450)
+
+  vehicle        VehicleType    @default(E_BIKE)
+  status         CourierStatus  @default(ONBOARDING)
+  /// Set once the courier has completed the age-verification training module;
+  /// required before they may be assigned age-restricted orders.
+  ageCheckCertifiedAt DateTime?
+
+  ratingAvg      Float          @default(0)
+  ratingCount    Int            @default(0)
+
+  orders         Order[]
+  shifts         CourierShift[]
+  assignments    Assignment[]
+  locations      CourierLocation[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([cityId, status])
+}
+
+/// Actual worked time. Required by the ECJ CCOO ruling, §16(2) ArbZG and the
+/// German time-recording obligation — and it is the basis for the wage floor.
+model CourierShift {
+  id            String    @id @default(cuid())
+  courierId     String
+  courier       Courier   @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  startedAt     DateTime
+  endedAt       DateTime?
+  breakSeconds  Int       @default(0)
+  dropsCompleted Int      @default(0)
+  /// Earnings before any statutory top-up, gross cents.
+  earnedCents   Int       @default(0)
+  /// Top-up booked by enforceWageFloor() when drops did not reach the floor.
+  topUpCents    Int       @default(0)
+
+  @@index([courierId, startedAt])
+}
+
+/// Full-resolution GPS is retained only while a delivery is active, then
+/// downsampled and purged at 30 days (GDPR Art. 5(1)(c) + (e)).
+model CourierLocation {
+  id        String   @id @default(cuid())
+  courierId String
+  courier   Courier  @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  latitude  Float
+  longitude Float
+  accuracy  Float?
+  heading   Float?
+  recordedAt DateTime @default(now())
+
+  @@index([courierId, recordedAt])
+}
+
+enum AssignmentStatus {
+  OFFERED
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  COMPLETED
+}
+
+model Assignment {
+  id         String           @id @default(cuid())
+  orderId    String
+  order      Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  courierId  String
+  courier    Courier          @relation(fields: [courierId], references: [id], onDelete: Cascade)
+  status     AssignmentStatus @default(OFFERED)
+  score      Float
+  /// Why this courier was chosen. Makes the Platform Work Directive's
+  /// algorithmic-transparency duty (Art. 6–11) answerable rather than aspirational.
+  reasonCodes String[]
+  offeredAt  DateTime         @default(now())
+  respondedAt DateTime?
+  expiresAt  DateTime
+
+  @@index([orderId])
+  @@index([courierId, status])
+}
+
+// ============================================================================
+// Payments & ledger
+// ============================================================================
+
+enum PaymentMethodType {
+  CARD
+  SEPA_DIRECT_DEBIT
+  PAYPAL
+  KLARNA
+  APPLE_PAY
+  GOOGLE_PAY
+  CASH_ON_DELIVERY
+  CREDIT
+}
+
+model PaymentMethod {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         PaymentMethodType
+  /// PSP token. No PAN or IBAN is ever stored in this system.
+  providerRef  String?
+  brand        String?
+  last4        String?
+  expiryMonth  Int?
+  expiryYear   Int?
+  /// SEPA mandate reference; mandates need pre-notification and carry an
+  /// 8-week no-questions chargeback window.
+  mandateRef   String?
+  isDefault    Boolean           @default(false)
+  payments     Payment[]
+  createdAt    DateTime          @default(now())
+
+  @@index([userId])
+}
+
+enum PaymentStatus {
+  REQUIRES_ACTION   // SCA / 3DS challenge pending
+  AUTHORISED
+  CAPTURED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Payment {
+  id              String         @id @default(cuid())
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id])
+  methodId        String?
+  method          PaymentMethod? @relation(fields: [methodId], references: [id])
+  status          PaymentStatus  @default(REQUIRES_ACTION)
+  /// Authorised at placement; captured at delivery.
+  authorisedAmount Int
+  capturedAmount   Int           @default(0)
+  refundedAmount   Int           @default(0)
+  providerRef     String?
+  providerPayload Json?
+  authorisedAt    DateTime?
+  capturedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
+enum CreditReason {
+  REFUND_GROCERY_ISSUE
+  REFUND_CANCELLATION
+  GOODWILL
+  PROMOTION
+  REFERRAL
+  SPEND
+  EXPIRY
+}
+
+/// Append-only ledger for platform credit. Never mutate; always append.
+model CreditEntry {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId   String?
+  order     Order?       @relation(fields: [orderId], references: [id])
+  /// Signed: positive grants credit, negative spends it.
+  amount    Int
+  reason    CreditReason
+  note      String?
+  expiresAt DateTime?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// ============================================================================
+// Promotions & loyalty
+// ============================================================================
+
+enum PromoType {
+  PERCENTAGE_OFF
+  FIXED_OFF
+  FREE_DELIVERY
+}
+
+model Promotion {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  type           PromoType
+  /// Basis points for PERCENTAGE_OFF, gross cents for FIXED_OFF.
+  value          Int
+  /// Cap on the discount for percentage promos, gross cents.
+  maxDiscount    Int?
+  minimumBasket  Int       @default(0)
+  /// Null = platform-wide.
+  merchantId     String?
+  firstOrderOnly Boolean   @default(false)
+  usageLimit     Int?
+  usageCount     Int       @default(0)
+  perUserLimit   Int       @default(1)
+  startsAt       DateTime
+  endsAt         DateTime
+  isActive       Boolean   @default(true)
+  redemptions    PromoRedemption[]
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+model PromoRedemption {
+  id          String    @id @default(cuid())
+  promotionId String
+  promotion   Promotion @relation(fields: [promotionId], references: [id])
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id])
+  amount      Int
+  createdAt   DateTime  @default(now())
+
+  @@index([promotionId, userId])
+}
+
+model LoyaltyAccount {
+  id           String              @id @default(cuid())
+  userId       String              @unique
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pointsBalance Int                @default(0)
+  lifetimePoints Int               @default(0)
+  tier         String              @default("BRONZE")
+  transactions LoyaltyTransaction[]
+  updatedAt    DateTime            @updatedAt
+}
+
+model LoyaltyTransaction {
+  id        String         @id @default(cuid())
+  accountId String
+  account   LoyaltyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Signed: positive earns, negative redeems.
+  points    Int
+  reason    String
+  orderId   String?
+  expiresAt DateTime?
+  createdAt DateTime       @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+/// Merchant-scoped "buy N, get one" card — a second loyalty mechanic that runs
+/// alongside platform points.
+model PunchCard {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId   String
+  merchant     Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  punches      Int      @default(0)
+  punchesNeeded Int     @default(9)
+  redeemedAt   DateTime?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, merchantId])
+}
+
+// ============================================================================
+// Reviews
+// ============================================================================
+
+model Review {
+  id           String   @id @default(cuid())
+  orderId      String   @unique
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId   String?
+  merchant     Merchant? @relation(fields: [merchantId], references: [id])
+  /// 1–5, matching the rating prompt shown after delivery.
+  rating       Int
+  courierRating Int?
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@index([merchantId, rating])
+}
+
+// ============================================================================
+// GDPR
+// ============================================================================
+
+enum ConsentPurpose {
+  MARKETING_EMAIL
+  MARKETING_PUSH
+  ANALYTICS
+  PERSONALISATION
+  LOCATION_BACKGROUND
+}
+
+model ConsentRecord {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose   ConsentPurpose
+  granted   Boolean
+  /// Consent must be as easy to withdraw as to give; both are recorded.
+  version   String
+  ipAddress String?
+  createdAt DateTime       @default(now())
+
+  @@index([userId, purpose, createdAt])
+}
+
+enum DataRequestType {
+  ACCESS      // Art. 15
+  PORTABILITY // Art. 20
+  ERASURE     // Art. 17
+}
+
+enum DataRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  REJECTED
+}
+
+model DataRequest {
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        DataRequestType
+  status      DataRequestStatus @default(PENDING)
+  /// Signed, expiring URL to the export bundle.
+  exportUrl   String?
+  /// What was retained despite an erasure request, and the legal basis — §147 AO
+  /// requires 10-year invoice retention, which overrides Art. 17. Erasure must
+  /// never silently half-succeed.
+  retainedNote String?
+  completedAt DateTime?
+  createdAt   DateTime          @default(now())
+
+  @@index([userId, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorType  String
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
