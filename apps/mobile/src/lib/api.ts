@@ -113,6 +113,16 @@ export const api = {
       body: JSON.stringify({ reason }),
     }),
 
+  addresses: () => request<Address[]>("/me/addresses"),
+
+  createAddress: (body: Omit<Address, "id" | "serviceable">) =>
+    request<Address>("/me/addresses", { method: "POST", body: JSON.stringify(body) }),
+
+  serviceability: (latitude: number, longitude: number) =>
+    request<{ serviceable: boolean; zoneId: string | null; cityName: string | null }>(
+      `/serviceability?latitude=${latitude}&longitude=${longitude}`,
+    ),
+
   createButler: (body: { addressId: string; request: string; budget: number }) =>
     request<{ orderId: string; reference: string; authorisedTotal: number }>("/butler", {
       method: "POST",
@@ -121,6 +131,22 @@ export const api = {
 };
 
 // --- Response shapes -------------------------------------------------------
+
+export interface Address {
+  id: string;
+  label: string | null;
+  street: string;
+  houseNumber: string;
+  floor: string | null;
+  entryCode: string | null;
+  postalCode: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  deliveryNote: string | null;
+  isDefault: boolean;
+  serviceable: boolean;
+}
 
 export interface MerchantCard {
   id: string; slug: string; name: string; type: string;

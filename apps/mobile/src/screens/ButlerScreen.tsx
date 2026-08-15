@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, Alert, ScrollView } from "react-native";
 import { formatEur } from "@liefero/shared";
 import { theme } from "../lib/theme";
-import { api, ApiError } from "../lib/api";
+import { api, ApiError, type Address } from "../lib/api";
+import type { ScreenProps } from "../lib/navigation";
 
 const BUDGET_PRESETS = [1000, 2500, 5000, 10_000];
 
@@ -14,24 +15,36 @@ const BUDGET_PRESETS = [1000, 2500, 5000, 10_000];
  * what the courier actually spends. Charging the full budget regardless would be
  * both a trust problem and, under German price-transparency rules, a legal one.
  */
-export function ButlerScreen({
-  route,
-  navigation,
-}: {
-  route: { params: { addressId: string } };
-  navigation: { replace: (s: string, p?: object) => void };
-}) {
+export function ButlerScreen({ route, navigation }: ScreenProps<"Butler">) {
   const [text, setText] = useState("");
   const [budget, setBudget] = useState(2500);
   const [submitting, setSubmitting] = useState(false);
+  const [address, setAddress] = useState<Address | null>(null);
 
+  const passedAddressId = route.params?.addressId;
+
+  // Butler is reachable straight from discovery, where no address has been
+  // chosen yet, so fall back to the account default.
+  useEffect(() => {
+    if (passedAddressId) return;
+    void api
+      .addresses()
+      .then((list) => setAddress(list.find((a) => a.isDefault && a.serviceable) ?? list[0] ?? null))
+      .catch(() => setAddress(null));
+  }, [passedAddressId]);
+
+  const addressId = passedAddressId ?? address?.id;
   const tooShort = text.trim().length < 10;
 
   async function submit() {
+    if (!addressId) {
+      Alert.alert("Adresse fehlt", "Füge zuerst eine Lieferadresse hinzu.");
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await api.createButler({
-        addressId: route.params.addressId,
+        addressId,
         request: text.trim(),
         budget,
       });
@@ -90,9 +103,9 @@ export function ButlerScreen({
       </View>
 
       <Pressable
-        style={[styles.submit, (tooShort || submitting) && styles.submitDisabled]}
+        style={[styles.submit, (tooShort || submitting || !addressId) && styles.submitDisabled]}
         onPress={submit}
-        disabled={tooShort || submitting}
+        disabled={tooShort || submitting || !addressId}
       >
         <Text style={styles.submitText}>
           {submitting ? "Wird gesendet…" : "Kostenpflichtig beauftragen"}

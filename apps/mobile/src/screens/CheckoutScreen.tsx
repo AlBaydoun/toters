@@ -4,16 +4,11 @@ import { formatEur, t } from "@liefero/shared";
 import { theme } from "../lib/theme";
 import { api, ApiError, type Quote } from "../lib/api";
 import { PriceBlock } from "../components/PriceBlock";
+import type { ScreenProps } from "../lib/navigation";
 
 const TIP_PRESETS = [0, 100, 200, 300];
 
-export function CheckoutScreen({
-  route,
-  navigation,
-}: {
-  route: { params: { addressId: string } };
-  navigation: { replace: (s: string, p?: object) => void };
-}) {
+export function CheckoutScreen({ route, navigation }: ScreenProps<"Checkout">) {
   const { addressId } = route.params;
   const [quote, setQuote] = useState<Quote | null>(null);
   const [promoCode, setPromoCode] = useState("");

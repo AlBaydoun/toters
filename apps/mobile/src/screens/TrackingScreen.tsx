@@ -3,10 +3,11 @@ import { View, Text, Pressable, ActivityIndicator, StyleSheet, Alert } from "rea
 import { t } from "@liefero/shared";
 import { theme } from "../lib/theme";
 import { api, type Tracking } from "../lib/api";
+import type { ScreenProps } from "../lib/navigation";
 
 const STEPS = ["AWAITING_MERCHANT", "PREPARING", "AWAITING_COURIER", "OUT_FOR_DELIVERY", "DELIVERED"];
 
-export function TrackingScreen({ route }: { route: { params: { orderId: string } } }) {
+export function TrackingScreen({ route }: ScreenProps<"Tracking">) {
   const { orderId } = route.params;
   const [tracking, setTracking] = useState<Tracking | null>(null);
 

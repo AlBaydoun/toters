@@ -5,8 +5,7 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "noEmit": true,
-    "lib": ["ES2022", "DOM"],
-    "paths": { "@liefero/shared": ["../../packages/shared/src/index.ts"] }
+    "lib": ["ES2022", "DOM"]
   },
   "include": ["src/**/*", "App.tsx"]
 }

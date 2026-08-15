@@ -4,6 +4,7 @@ import * as Location from "expo-location";
 import { formatEur } from "@liefero/shared";
 import { theme } from "../lib/theme";
 import { api, type MerchantCard } from "../lib/api";
+import type { ScreenProps } from "../lib/navigation";
 
 const VERTICALS = [
   { key: undefined, label: "Alles" },
@@ -18,7 +19,7 @@ const VERTICALS = [
  * Discovery is address-first: fee, availability and ETA all depend on where the
  * customer is, so nothing renders until we have a position.
  */
-export function DiscoverScreen({ navigation }: { navigation: { navigate: (s: string, p?: object) => void } }) {
+export function DiscoverScreen({ navigation }: ScreenProps<"Discover">) {
   const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [merchants, setMerchants] = useState<MerchantCard[]>([]);
   const [serviceable, setServiceable] = useState(true);

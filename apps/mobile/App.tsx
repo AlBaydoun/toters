@@ -9,7 +9,9 @@ import { CheckoutScreen } from "./src/screens/CheckoutScreen";
 import { TrackingScreen } from "./src/screens/TrackingScreen";
 import { ButlerScreen } from "./src/screens/ButlerScreen";
 
-const Stack = createNativeStackNavigator();
+import type { RootStackParamList } from "./src/lib/navigation";
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   const [ready, setReady] = useState(false);

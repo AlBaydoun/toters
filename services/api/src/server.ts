@@ -5,6 +5,7 @@ import { env } from "./lib/env.js";
 import { AppError } from "./lib/errors.js";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./modules/auth.js";
+import addressRoutes from "./modules/addresses.js";
 import catalogRoutes from "./modules/catalog.js";
 import cartRoutes from "./modules/cart.js";
 import checkoutRoutes from "./modules/checkout.js";
@@ -39,7 +40,8 @@ export async function buildServer() {
       });
     }
     if ((error as { validation?: unknown }).validation) {
-      return reply.code(400).send({ error: { code: "VALIDATION_ERROR", message: error.message } });
+      const message = error instanceof Error ? error.message : "Invalid request.";
+      return reply.code(400).send({ error: { code: "VALIDATION_ERROR", message } });
     }
     request.log.error(error);
     return reply.code(500).send({ error: { code: "INTERNAL_ERROR", message: "Something went wrong." } });
@@ -48,6 +50,7 @@ export async function buildServer() {
   app.get("/health", async () => ({ status: "ok", region: env.DATA_REGION }));
 
   await app.register(authRoutes, { prefix: "/v1" });
+  await app.register(addressRoutes, { prefix: "/v1" });
   await app.register(catalogRoutes, { prefix: "/v1" });
   await app.register(cartRoutes, { prefix: "/v1" });
   await app.register(checkoutRoutes, { prefix: "/v1" });
