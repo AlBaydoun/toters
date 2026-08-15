@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Liefero Kurier",
+    "slug": "liefero-courier",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "lieferokurier",
+    "android": {
+      "package": "de.liefero.courier",
+      "versionCode": 1,
+      "adaptiveIcon": { "backgroundColor": "#14201B" },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "extra": { "apiBaseUrl": "http://10.0.2.2:4000/v1" }
+  }
+}

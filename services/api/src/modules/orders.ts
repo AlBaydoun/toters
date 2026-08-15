@@ -192,6 +192,85 @@ export default async function orderRoutes(app: FastifyInstance) {
     return { status: updated.status };
   });
 
+  /**
+   * Courier records the ID check for an age-restricted order.
+   *
+   * We store the outcome and the document TYPE only — never the document number
+   * and never an image. Recording more would be a data-minimisation breach
+   * (GDPR Art. 5(1)(c)) and would turn every courier phone into a liability.
+   */
+  app.post("/orders/:id/age-check", { preHandler: app.requireAuth }, async (request) => {
+    const { id } = z.object({ id: z.string() }).parse(request.params);
+    const body = z
+      .object({
+        verified: z.boolean(),
+        documentType: z
+          .enum(["PERSONALAUSWEIS", "REISEPASS", "AUFENTHALTSTITEL", "EU_DRIVING_LICENCE"])
+          .nullable(),
+      })
+      .parse(request.body);
+
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) throw notFound("Order");
+    if (order.requiredAge == null) {
+      throw badRequest("NO_AGE_CHECK_REQUIRED", "This order doesn't need an ID check.");
+    }
+    if (body.verified && !body.documentType) {
+      throw badRequest("DOCUMENT_TYPE_REQUIRED", "Record which document you checked.");
+    }
+
+    if (!body.verified) {
+      // A failed check means the goods go back. The customer is charged per the
+      // cancellation tier they were in — this is a refusal at the door, not a
+      // free cancellation, or the age gate becomes a way to order and refuse.
+      const policy = cancellationPolicyFor(order.status as OrderStatus);
+      const charge = applyBps(order.itemsSubtotal + order.depositTotal, policy.goodsChargeBps);
+
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id },
+          data: {
+            status: "CANCELLED",
+            cancelledAt: new Date(),
+            cancellationReason: "AGE_VERIFICATION_FAILED",
+            cancellationCharge: charge,
+          },
+        });
+        await tx.orderEvent.create({
+          data: {
+            orderId: id,
+            status: "CANCELLED",
+            actorType: "COURIER",
+            actorId: request.userId ?? null,
+            metadata: { kind: "AGE_CHECK_FAILED" },
+          },
+        });
+      });
+
+      return { verified: false, orderCancelled: true, charged: charge };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id },
+        data: { ageVerifiedAt: new Date(), ageVerifiedBy: request.userId ?? null },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorType: "COURIER",
+          actorId: request.userId ?? null,
+          action: "AGE_VERIFIED",
+          entityType: "Order",
+          entityId: id,
+          // Type only. No number, no scan.
+          metadata: { documentType: body.documentType, requiredAge: order.requiredAge },
+        },
+      });
+    });
+
+    return { verified: true, orderCancelled: false };
+  });
+
   /** The 1–5 rating prompt shown after delivery, feeding support triage. */
   app.post("/orders/:id/review", { preHandler: app.requireAuth }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
