@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "lib": ["ES2022", "DOM"],
+    "paths": { "@liefero/shared": ["../../packages/shared/src/index.ts"] }
+  },
+  "include": ["src/**/*", "App.tsx"]
+}

@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Liefero",
+    "slug": "liefero",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "liefero",
+    "userInterfaceStyle": "automatic",
+    "android": {
+      "package": "de.liefero.customer",
+      "versionCode": 1,
+      "adaptiveIcon": { "backgroundColor": "#0B7A5B" },
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
+      "blockedPermissions": ["ACCESS_BACKGROUND_LOCATION"]
+    },
+    "locales": { "de": "./locales/de.json", "en": "./locales/en.json" },
+    "extra": { "apiBaseUrl": "http://10.0.2.2:4000/v1" }
+  }
+}
