@@ -10,6 +10,7 @@ import {
   type ActorType,
   type OrderStatus,
 } from "@liefero/shared";
+import { awardOrderRewards } from "./loyalty.js";
 
 export default async function orderRoutes(app: FastifyInstance) {
   app.get("/orders", { preHandler: app.requireAuth }, async (request) => {
@@ -173,6 +174,21 @@ export default async function orderRoutes(app: FastifyInstance) {
       });
     });
 
+    // A merchant rejection leaves an authorisation we will never capture.
+    // Releasing it promptly matters: a stale hold on a customer's card is the
+    // kind of thing that ends the relationship.
+    if (to === "REJECTED") {
+      await releaseAuthorisation(order.id);
+    }
+
+    // Delivery is where the money actually moves. These run after the status
+    // transaction rather than inside it: a loyalty failure must never roll back
+    // a delivery that physically happened.
+    if (to === "DELIVERED") {
+      const settlement = await settleDelivery(order.id, request.userId ?? null);
+      return { status: updated.status, settlement };
+    }
+
     return { status: updated.status };
   });
 
@@ -223,4 +239,111 @@ export default async function orderRoutes(app: FastifyInstance) {
 
     return { id: review.id, rating: review.rating };
   });
+}
+
+/**
+ * Everything that must happen when goods reach the customer's door.
+ *
+ * Each step is isolated: the capture is the only one that can legitimately fail
+ * in a way the courier needs to know about, and a failure in rewards or drop
+ * accounting must not make a delivered order look undelivered.
+ */
+async function settleDelivery(orderId: string, actorId: string | null) {
+  const order = await prisma.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: { payments: true },
+  });
+
+  const result: {
+    captured: boolean;
+    capturedAmount: number;
+    requiresNewAuthorisation: boolean;
+    pointsAwarded: number | null;
+  } = { captured: false, capturedAmount: 0, requiresNewAuthorisation: false, pointsAwarded: null };
+
+  const payment = order.payments.find((p) => p.status === "AUTHORISED");
+  if (payment) {
+    // Substitutions may have moved the total since authorisation. Capturing
+    // less is fine; capturing more needs a fresh mandate under PSD2.
+    if (order.grandTotal > payment.authorisedAmount) {
+      result.requiresNewAuthorisation = true;
+    } else {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "CAPTURED",
+          capturedAmount: order.grandTotal,
+          capturedAt: new Date(),
+        },
+      });
+      result.captured = true;
+      result.capturedAmount = order.grandTotal;
+    }
+  }
+
+  if (order.courierId) {
+    const shift = await prisma.courierShift.findFirst({
+      where: { courierId: order.courierId, endedAt: null },
+    });
+    if (shift) {
+      await prisma.courierShift.update({
+        where: { id: shift.id },
+        data: { dropsCompleted: { increment: 1 }, earnedCents: { increment: 180 } },
+      });
+    }
+    await prisma.assignment.updateMany({
+      where: { orderId, courierId: order.courierId, status: "ACCEPTED" },
+      data: { status: "COMPLETED" },
+    });
+  }
+
+  try {
+    const rewards = await awardOrderRewards(orderId);
+    result.pointsAwarded = rewards?.pointsAwarded ?? null;
+  } catch {
+    // Loyalty is not worth failing a delivery over; ops can backfill.
+  }
+
+  if (result.captured) {
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({ where: { id: orderId }, data: { status: "SETTLED" } });
+      await tx.orderEvent.create({
+        data: { orderId, status: "SETTLED", actorType: "SYSTEM", actorId },
+      });
+    });
+  }
+
+  return result;
+}
+
+/** Release a hold on an order that will never be fulfilled. */
+async function releaseAuthorisation(orderId: string) {
+  const order = await prisma.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: { payments: true },
+  });
+
+  const payment = order.payments.find(
+    (p) => p.status === "AUTHORISED" || p.status === "REQUIRES_ACTION",
+  );
+  if (payment) {
+    await prisma.payment.update({ where: { id: payment.id }, data: { status: "FAILED" } });
+  }
+
+  if (order.creditApplied > 0) {
+    await prisma.$transaction(async (tx) => {
+      await tx.creditEntry.create({
+        data: {
+          userId: order.userId,
+          orderId,
+          amount: order.creditApplied,
+          reason: "REFUND_CANCELLATION",
+        },
+      });
+      await tx.user.update({
+        where: { id: order.userId },
+        data: { creditBalance: { increment: order.creditApplied } },
+      });
+    });
+  }
 }

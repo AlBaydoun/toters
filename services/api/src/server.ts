@@ -13,6 +13,10 @@ import orderRoutes from "./modules/orders.js";
 import butlerRoutes from "./modules/butler.js";
 import dispatchRoutes from "./modules/dispatch.js";
 import gdprRoutes from "./modules/gdpr.js";
+import paymentRoutes from "./modules/payments.js";
+import loyaltyRoutes from "./modules/loyalty.js";
+import shiftRoutes from "./modules/shifts.js";
+import substitutionRoutes from "./modules/substitutions.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -57,6 +61,10 @@ export async function buildServer() {
   await app.register(orderRoutes, { prefix: "/v1" });
   await app.register(butlerRoutes, { prefix: "/v1" });
   await app.register(dispatchRoutes, { prefix: "/v1" });
+  await app.register(paymentRoutes, { prefix: "/v1" });
+  await app.register(loyaltyRoutes, { prefix: "/v1" });
+  await app.register(shiftRoutes, { prefix: "/v1" });
+  await app.register(substitutionRoutes, { prefix: "/v1" });
   await app.register(gdprRoutes, { prefix: "/v1" });
 
   return app;
