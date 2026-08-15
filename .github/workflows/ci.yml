@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The API's types come from the generated Prisma client, so this must run
+      # before anything is typechecked.
+      - name: Generate Prisma client
+        run: npm run generate -w @liefero/api
+
+      # Consumers import @liefero/shared via its built declarations, not source.
+      - name: Build shared
+        run: npm run build -w @liefero/shared
+
+      - name: Test shared domain logic
+        run: npm test -w @liefero/shared
+
+      - name: Test API
+        run: npm test -w @liefero/api
+
+      - name: Typecheck API
+        run: npm run typecheck -w @liefero/api
+
+      - name: Typecheck customer app
+        run: npm run typecheck -w @liefero/mobile
+
+      - name: Typecheck courier app
+        run: npm run typecheck -w @liefero/courier

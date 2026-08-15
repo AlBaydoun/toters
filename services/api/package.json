@@ -10,7 +10,7 @@
     "migrate": "prisma migrate dev",
     "generate": "prisma generate",
     "seed": "tsx prisma/seed.ts",
-    "test": "tsc -p tsconfig.json --noEmit"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

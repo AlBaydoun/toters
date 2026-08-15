@@ -51,28 +51,57 @@ Run the domain tests — these cover the rules that are expensive to get wrong:
 npm test -w @liefero/shared
 ```
 
+## Verification
+
+```bash
+npm ci
+npm run generate -w @liefero/api   # Prisma client — the API's types come from it
+npm run build -w @liefero/shared   # consumers use its declarations, not its source
+npm test                           # 32 tests
+npm run typecheck                  # API + both apps
+```
+
+CI runs all of the above on every push.
+
 ## What's actually built
 
-**Working:**
-- Full domain model (36 Prisma models) for the three-sided marketplace
-- German VAT engine with pro-rata fee apportionment across rate buckets
-- Delivery fee with distance taper and capped, disclosed surge
-- Order state machine with tiered cancellation charges
-- Dispatch scoring with batching and courier earnings fairness
-- Minimum-wage floor enforcement and ArbZG working-time guards
-- API: auth (OTP), discovery, catalog, cart, checkout, orders, tracking,
-  Butler, dispatch, GDPR data-subject rights, retention sweep
-- Android app: discovery, checkout, live tracking, Butler
+**Domain logic** (`packages/shared`, 26 tests) — German VAT with pro-rata fee
+apportionment, delivery fee with distance taper and capped surge, order state
+machine, tiered cancellation policy, statutory wage floor, ArbZG working-time
+guards, dispatch scoring, PAngV unit pricing, JuSchG age rules.
 
-**Not built yet** — the honest list:
-- Payment provider integration (schema and flow are in place; the Stripe/PSP
-  calls are not wired)
-- Merchant console and courier app beyond scaffolds
-- Push notifications, in-app VoIP bridging
-- Grocery substitution flow (modelled, not implemented)
-- Loyalty points and punch cards (modelled, endpoints not written)
+**API** (`services/api`, 6 tests) — OTP auth, addresses with serviceability,
+PostGIS discovery, catalog, cart, checkout, orders with live tracking, Butler,
+dispatch with recorded decision reasons, payments, loyalty and punch cards,
+grocery substitutions, courier shifts and payroll, age verification, GDPR
+data-subject rights, retention sweep.
+
+**Customer app** (`apps/mobile`) — discovery, checkout with the full price and
+VAT breakdown, live tracking, Butler.
+
+**Courier app** (`apps/courier`) — shift control with live earnings and the
+visible wage guarantee, offers with an assignment explanation, delivery flow,
+ID verification.
+
+### Payments: what "built" means here
+
+The flow is complete and tested — authorise at placement, capture at delivery,
+over-capture refused and surfaced as needing fresh authorisation, SCA handling,
+refunds, voids. `StripePsp` implements the calls against Stripe's API; `FakePsp`
+backs the tests and local development. **It has not been run against a real
+Stripe account**, so treat the Stripe implementation as unverified against the
+live API even though its semantics are covered by tests.
+
+## Not built
+
+- Merchant console (`apps/merchant`) — scaffold only
+- Push notifications and in-app VoIP bridging between customer and courier
 - No migration has been generated — run `prisma migrate dev` against a live
   Postgres to create one
+- Points expiry is recorded per transaction but nothing sweeps expired points yet
+- The retention sweep exists but nothing schedules it
+- No merchant-side order acceptance UI; merchants currently transition orders
+  through the API directly
 
 ## Legal note
 

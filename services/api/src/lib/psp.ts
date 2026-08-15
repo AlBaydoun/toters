@@ -104,7 +104,7 @@ export class FakePsp implements Psp {
     return { providerRef, capturedAmount: amount };
   }
 
-  async refund(providerRef: string, amount: Money): Promise<RefundResult> {
+  async refund(providerRef: string, amount: Money, _reason: string): Promise<RefundResult> {
     const record = this.authorisations.get(providerRef);
     if (!record) throw new Error(`Unknown authorisation ${providerRef}`);
     if (amount > record.captured) throw new Error("Cannot refund more than was captured");
