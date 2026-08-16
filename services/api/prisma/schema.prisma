@@ -252,6 +252,7 @@ model Merchant {
   ratingCount     Int            @default(0)
 
   openingHours    OpeningHours[]
+  staff           MerchantStaff[]
   categories      Category[]
   products        Product[]
   orders          Order[]
@@ -262,6 +263,34 @@ model Merchant {
 
   @@index([cityId, status])
   @@index([type, status])
+}
+
+enum MerchantRole {
+  /// Full access including bank/legal details and staff management.
+  OWNER
+  /// Day-to-day: order queue, availability, prep time.
+  MANAGER
+  /// Order queue only. What a counter tablet logs in as.
+  STAFF
+}
+
+/// A person who can act on behalf of a merchant. Separate from User: a merchant
+/// operator is not a customer, and conflating them is how a customer token ends
+/// up able to accept orders.
+model MerchantStaff {
+  id           String       @id @default(cuid())
+  merchantId   String
+  merchant     Merchant     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  email        String       @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  role         MerchantRole @default(STAFF)
+  lastLoginAt  DateTime?
+  disabledAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@index([merchantId])
 }
 
 model OpeningHours {

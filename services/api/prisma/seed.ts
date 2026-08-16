@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import argon2 from "argon2";
 
 const prisma = new PrismaClient();
 
@@ -62,6 +63,19 @@ async function main() {
     },
   });
 
+  // A staff login so the merchant console is usable immediately. Development
+  // credentials only — the password is printed below, which is exactly why this
+  // must never run against production.
+  await prisma.merchantStaff.create({
+    data: {
+      merchantId: merchant.id,
+      email: "chef@kleinekueche.example",
+      passwordHash: await argon2.hash("liefero-dev-passwort"),
+      firstName: "Rana",
+      role: "OWNER",
+    },
+  });
+
   const category = await prisma.category.create({
     data: { merchantId: merchant.id, name: "Hauptgerichte", sortOrder: 0 },
   });
@@ -120,6 +134,7 @@ async function main() {
   });
 
   console.log(`Seeded ${city.name}: zone ${zone.name}, merchant ${merchant.name}`);
+  console.log("Merchant console login: chef@kleinekueche.example / liefero-dev-passwort");
 }
 
 main()

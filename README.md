@@ -76,6 +76,10 @@ dispatch with recorded decision reasons, payments, loyalty and punch cards,
 grocery substitutions, courier shifts and payroll, age verification, GDPR
 data-subject rights, retention sweep.
 
+**Merchant console** (`apps/merchant`) — live order queue with accept/reject and
+prep-time capture, the LMIV allergen editor that unblocks selling, availability
+toggles, store pause, and a statement showing commission as an explicit line.
+
 **Customer app** (`apps/mobile`) — discovery, checkout with the full price and
 VAT breakdown, live tracking, Butler.
 
@@ -92,16 +96,33 @@ backs the tests and local development. **It has not been run against a real
 Stripe account**, so treat the Stripe implementation as unverified against the
 live API even though its semantics are covered by tests.
 
+## Security note
+
+An earlier revision took `actorType` from the request body on
+`/orders/:id/transition`, which let any authenticated customer accept, reject or
+complete **any order in the system**. `/payroll/run`, `/payments/capture`,
+`/payments/void`, `/dispatch/assign` and `/shifts/record-drop` were
+unauthenticated outright — the first of those returned courier names and
+earnings.
+
+Both are fixed. The actor now comes from the signed token, ownership is checked
+per order, and internal endpoints require a service token. The ownership
+decision lives in `packages/shared/src/authorisation.ts` as a pure function with
+its own tests, including a regression test for the impersonation case, so it
+fails closed on any actor type nobody has explicitly handled.
+
+If you fork this before that commit, take the fix.
+
 ## Not built
 
-- Merchant console (`apps/merchant`) — scaffold only
 - Push notifications and in-app VoIP bridging between customer and courier
 - No migration has been generated — run `prisma migrate dev` against a live
   Postgres to create one
 - Points expiry is recorded per transaction but nothing sweeps expired points yet
 - The retention sweep exists but nothing schedules it
-- No merchant-side order acceptance UI; merchants currently transition orders
-  through the API directly
+- Merchant staff invite/management UI — accounts are created by seed or ops
+- Courier passwords are not yet self-serve; `/auth/courier/login` verifies
+  against a placeholder hash until onboarding lands
 
 ## Legal note
 

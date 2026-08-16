@@ -42,3 +42,6 @@ jobs:
 
       - name: Typecheck courier app
         run: npm run typecheck -w @liefero/courier
+
+      - name: Typecheck merchant console
+        run: npm run typecheck -w @liefero/merchant

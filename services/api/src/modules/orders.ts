@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { badRequest, forbidden, notFound } from "../lib/errors.js";
+import { assertOrderActor } from "../plugins/auth.js";
 import {
   applyBps,
   assertTransition,
@@ -136,21 +137,29 @@ export default async function orderRoutes(app: FastifyInstance) {
     return { status: updated.status, charged: charge, refundedAsCredit: Math.max(0, order.grandTotal - charge) };
   });
 
-  /** Merchant and courier both drive the order forward through this one endpoint. */
-  app.post("/orders/:id/transition", { preHandler: app.requireAuth }, async (request) => {
+  /**
+   * Merchant and courier both drive the order forward through this one endpoint.
+   *
+   * The actor comes from the token and the order is checked for ownership. An
+   * earlier version took actorType from the request body, which let any
+   * authenticated user accept, reject or complete any order in the system.
+   */
+  app.post("/orders/:id/transition", { preHandler: app.requireActor("MERCHANT", "COURIER", "ADMIN") }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
-    const { to, actorType } = z
+    const { to } = z
       .object({
         to: z.enum(["PREPARING", "REJECTED", "AWAITING_COURIER", "OUT_FOR_DELIVERY", "DELIVERED"]),
-        actorType: z.enum(["MERCHANT", "COURIER"]),
       })
       .parse(request.body);
+
+    await assertOrderActor(request, id);
 
     const order = await prisma.order.findUnique({ where: { id } });
     if (!order) throw notFound("Order");
 
+    const actorType = request.actorType as ActorType;
     // Throws on both an illegal transition and a wrong actor.
-    assertTransition(order.status as OrderStatus, to, actorType as ActorType);
+    assertTransition(order.status as OrderStatus, to, actorType);
 
     // An age-restricted order cannot be completed without a recorded ID check.
     if (to === "DELIVERED" && order.requiredAge != null && !order.ageVerifiedAt) {
@@ -199,8 +208,9 @@ export default async function orderRoutes(app: FastifyInstance) {
    * and never an image. Recording more would be a data-minimisation breach
    * (GDPR Art. 5(1)(c)) and would turn every courier phone into a liability.
    */
-  app.post("/orders/:id/age-check", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/orders/:id/age-check", { preHandler: app.requireActor("COURIER", "ADMIN") }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
+    await assertOrderActor(request, id);
     const body = z
       .object({
         verified: z.boolean(),

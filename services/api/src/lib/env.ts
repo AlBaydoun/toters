@@ -9,6 +9,8 @@ const schema = z.object({
   ACCESS_TOKEN_TTL: z.coerce.number().default(900),
   REFRESH_TOKEN_TTL: z.coerce.number().default(2_592_000),
   STRIPE_SECRET_KEY: z.string().optional(),
+  /** Shared secret for internal service-to-service calls. */
+  SERVICE_TOKEN: z.string().min(16).default("dev-service-token-change-me"),
   DATA_REGION: z.string().default("eu-central-1"),
   DPO_EMAIL: z.string().default("datenschutz@liefero.de"),
 });

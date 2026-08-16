@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { badRequest, notFound } from "../lib/errors.js";
+import { assertOrderActor } from "../plugins/auth.js";
 import { buildQuote, type QuoteLine, type VatCategory } from "@liefero/shared";
 
 /**
@@ -21,8 +22,9 @@ const SUBSTITUTION_TIMEOUT_SECONDS = 180;
 
 export default async function substitutionRoutes(app: FastifyInstance) {
   /** Courier proposes a replacement for an out-of-stock line. */
-  app.post("/orders/:orderId/substitutions", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/orders/:orderId/substitutions", { preHandler: app.requireActor("COURIER", "MERCHANT") }, async (request) => {
     const { orderId } = z.object({ orderId: z.string() }).parse(request.params);
+    await assertOrderActor(request, orderId);
     const body = z
       .object({
         orderItemId: z.string(),
@@ -169,10 +171,11 @@ export default async function substitutionRoutes(app: FastifyInstance) {
   });
 
   /** Courier marks an item unavailable with no replacement offered. */
-  app.post("/orders/:orderId/items/:itemId/unavailable", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/orders/:orderId/items/:itemId/unavailable", { preHandler: app.requireActor("COURIER", "MERCHANT") }, async (request) => {
     const { orderId, itemId } = z
       .object({ orderId: z.string(), itemId: z.string() })
       .parse(request.params);
+    await assertOrderActor(request, orderId);
 
     const item = await prisma.orderItem.findFirst({ where: { id: itemId, orderId } });
     if (!item) throw notFound("Order item");

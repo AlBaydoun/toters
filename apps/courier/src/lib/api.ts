@@ -98,7 +98,8 @@ export const api = {
   transition: (orderId: string, to: string) =>
     request<{ status: string; settlement?: unknown }>(`/orders/${orderId}/transition`, {
       method: "POST",
-      body: JSON.stringify({ to, actorType: "COURIER" }),
+      // actorType is no longer accepted from the body — it comes from the token.
+      body: JSON.stringify({ to }),
     }),
 
   proposeSubstitution: (orderId: string, orderItemId: string, replacementProductId: string | null) =>

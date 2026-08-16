@@ -21,7 +21,7 @@ import { enforceWageFloor, minimumWageAt, validateShift } from "@liefero/shared"
 const PER_DROP_CENTS = 180;
 
 export default async function shiftRoutes(app: FastifyInstance) {
-  app.post("/shifts/start", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/shifts/start", { preHandler: app.requireActor("COURIER", "ADMIN") }, async (request) => {
     const { courierId } = z.object({ courierId: z.string() }).parse(request.body);
 
     const courier = await prisma.courier.findUnique({ where: { id: courierId } });
@@ -63,7 +63,7 @@ export default async function shiftRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/shifts/:id/end", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/shifts/:id/end", { preHandler: app.requireActor("COURIER", "ADMIN") }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const { breakSeconds } = z
       .object({ breakSeconds: z.number().int().min(0).default(0) })
@@ -133,7 +133,7 @@ export default async function shiftRoutes(app: FastifyInstance) {
   });
 
   /** Credit a completed drop to the open shift. */
-  app.post("/shifts/record-drop", async (request) => {
+  app.post("/shifts/record-drop", { preHandler: app.requireService }, async (request) => {
     const { courierId, orderId } = z
       .object({ courierId: z.string(), orderId: z.string() })
       .parse(request.body);
@@ -165,7 +165,7 @@ export default async function shiftRoutes(app: FastifyInstance) {
   });
 
   /** What the courier has earned so far today, including any top-up owed. */
-  app.get("/shifts/current", { preHandler: app.requireAuth }, async (request) => {
+  app.get("/shifts/current", { preHandler: app.requireActor("COURIER", "ADMIN") }, async (request) => {
     const { courierId } = z.object({ courierId: z.string() }).parse(request.query);
 
     const shift = await prisma.courierShift.findFirst({
@@ -201,7 +201,12 @@ export default async function shiftRoutes(app: FastifyInstance) {
    * top-ups, ready for export to the payroll provider — this system never holds
    * bank details.
    */
-  app.get("/payroll/run", async (request) => {
+  /**
+   * Payroll data is personal data about identified employees, so it is
+   * admin-only. It was briefly unauthenticated, which would have been a
+   * reportable breach under GDPR Art. 33.
+   */
+  app.get("/payroll/run", { preHandler: app.requireActor("ADMIN") }, async (request) => {
     const { from, to } = z
       .object({ from: z.string().datetime(), to: z.string().datetime() })
       .parse(request.query);

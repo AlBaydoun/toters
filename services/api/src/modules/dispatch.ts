@@ -11,7 +11,7 @@ export default async function dispatchRoutes(app: FastifyInstance) {
    * Assign the best courier to an order. Called when the merchant marks an order
    * ready, and re-run on decline or expiry.
    */
-  app.post("/dispatch/:orderId/assign", async (request) => {
+  app.post("/dispatch/:orderId/assign", { preHandler: app.requireService }, async (request) => {
     const { orderId } = z.object({ orderId: z.string() }).parse(request.params);
 
     const order = await prisma.order.findUnique({
@@ -120,7 +120,7 @@ export default async function dispatchRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/dispatch/assignments/:id/respond", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/dispatch/assignments/:id/respond", { preHandler: app.requireActor("COURIER") }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const { accept } = z.object({ accept: z.boolean() }).parse(request.body);
 
@@ -150,7 +150,7 @@ export default async function dispatchRoutes(app: FastifyInstance) {
    * Courier position ping. Full-resolution fixes are retained only while a
    * delivery is active and purged at 30 days by the retention job.
    */
-  app.post("/dispatch/location", { preHandler: app.requireAuth }, async (request) => {
+  app.post("/dispatch/location", { preHandler: app.requireActor("COURIER") }, async (request) => {
     const body = z
       .object({
         courierId: z.string(),
@@ -166,7 +166,7 @@ export default async function dispatchRoutes(app: FastifyInstance) {
   });
 
   /** Explain an assignment decision to the courier it affected. */
-  app.get("/dispatch/assignments/:id/explanation", { preHandler: app.requireAuth }, async (request) => {
+  app.get("/dispatch/assignments/:id/explanation", { preHandler: app.requireActor("COURIER") }, async (request) => {
     const { id } = z.object({ id: z.string() }).parse(request.params);
     const assignment = await prisma.assignment.findUnique({ where: { id } });
     if (!assignment) throw notFound("Assignment");

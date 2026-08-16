@@ -16,11 +16,16 @@ import gdprRoutes from "./modules/gdpr.js";
 import paymentRoutes from "./modules/payments.js";
 import loyaltyRoutes from "./modules/loyalty.js";
 import shiftRoutes from "./modules/shifts.js";
+import merchantRoutes from "./modules/merchant.js";
 import substitutionRoutes from "./modules/substitutions.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     requireAuth: (request: import("fastify").FastifyRequest) => Promise<void>;
+    requireActor: (
+      ...allowed: import("./plugins/auth.js").Actor[]
+    ) => (request: import("fastify").FastifyRequest) => Promise<void>;
+    requireService: (request: import("fastify").FastifyRequest) => Promise<void>;
   }
 }
 
@@ -64,6 +69,7 @@ export async function buildServer() {
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(loyaltyRoutes, { prefix: "/v1" });
   await app.register(shiftRoutes, { prefix: "/v1" });
+  await app.register(merchantRoutes, { prefix: "/v1" });
   await app.register(substitutionRoutes, { prefix: "/v1" });
   await app.register(gdprRoutes, { prefix: "/v1" });
 

@@ -155,7 +155,7 @@ export default async function paymentRoutes(app: FastifyInstance) {
    * which after substitutions may be less than authorised — and occasionally
    * more, which is the case that must never pass silently.
    */
-  app.post("/payments/capture", async (request) => {
+  app.post("/payments/capture", { preHandler: app.requireService }, async (request) => {
     const { orderId, finalAmount } = z
       .object({ orderId: z.string(), finalAmount: z.number().int().min(0).optional() })
       .parse(request.body);
@@ -274,7 +274,7 @@ export default async function paymentRoutes(app: FastifyInstance) {
   });
 
   /** Release a hold we will never capture — merchant rejection, no courier found. */
-  app.post("/payments/void", async (request) => {
+  app.post("/payments/void", { preHandler: app.requireService }, async (request) => {
     const { orderId } = z.object({ orderId: z.string() }).parse(request.body);
 
     const order = await prisma.order.findUnique({
