@@ -105,7 +105,40 @@ export function chatSocketUrl(orderId: string) {
   return `${BASE_URL.replace(/^http/, "ws")}/orders/${orderId}/chat/live`;
 }
 
+export interface CourierFeedback {
+  rating: number | null;
+  ratingCount: number;
+  compliments: { code: string; count: number }[];
+  reviews: {
+    id: string;
+    rating: number | null;
+    comment: string | null;
+    compliments: string[];
+    createdAt: string;
+    contested: boolean;
+    resolved: boolean;
+    canContest: boolean;
+  }[];
+  yourRights: { explanation: string; contact: string };
+}
+
 export const api = {
+  feedback: () => request<CourierFeedback>("/me/courier/feedback"),
+
+  contestReview: (reviewId: string, reason: string) =>
+    request<{ contested: boolean; message: string }>(
+      `/me/courier/feedback/${reviewId}/contest`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+
+  setPhoto: (mediaId: string) =>
+    request<{ photoUrl: string; consentAt: string | null }>("/me/courier/photo", {
+      method: "PUT",
+      body: JSON.stringify({ mediaId, consent: true }),
+    }),
+
+  removePhoto: () => request<{ removed: boolean }>("/me/courier/photo", { method: "DELETE" }),
+
   chat: (orderId: string) => request<ChatThread>(`/orders/${orderId}/chat`),
 
   sendMessage: (

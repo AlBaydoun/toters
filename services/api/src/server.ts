@@ -19,6 +19,7 @@ import loyaltyRoutes from "./modules/loyalty.js";
 import shiftRoutes from "./modules/shifts.js";
 import merchantRoutes from "./modules/merchant.js";
 import chatRoutes from "./modules/chat.js";
+import reviewRoutes from "./modules/reviews.js";
 import substitutionRoutes from "./modules/substitutions.js";
 
 declare module "fastify" {
@@ -82,6 +83,7 @@ export async function buildServer() {
   await app.register(shiftRoutes, { prefix: "/v1" });
   await app.register(merchantRoutes, { prefix: "/v1" });
   await app.register(chatRoutes, { prefix: "/v1" });
+  await app.register(reviewRoutes, { prefix: "/v1" });
   await app.register(substitutionRoutes, { prefix: "/v1" });
   await app.register(gdprRoutes, { prefix: "/v1" });
 

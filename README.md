@@ -83,6 +83,12 @@ toggles, store pause, and a statement showing commission as an explicit line.
 **Customer app** (`apps/mobile`) — discovery, checkout with the full price and
 VAT breakdown, live map tracking, order chat with photos, Butler.
 
+**Courier identity and ratings** — the courier's photo, first name and star
+rating appear during tracking and in chat. Customers rate the food and the
+delivery on one screen, with structured compliments alongside free text.
+Couriers see everything said about them, can contest it, and control their own
+photo.
+
 **Live tracking and chat** — the courier moves on a real map with an animated
 marker and a cycling route from OSRM; customer and courier chat in-thread with
 photo sharing. Neither side ever sees the other's phone number, EXIF is stripped

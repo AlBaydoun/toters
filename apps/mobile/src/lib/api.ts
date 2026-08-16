@@ -150,6 +150,20 @@ export const api = {
       `/serviceability?latitude=${latitude}&longitude=${longitude}`,
     ),
 
+  courierProfile: (courierId: string) => request<CourierProfile>(`/couriers/${courierId}/profile`),
+
+  submitReview: (
+    orderId: string,
+    body: {
+      rating: number; comment?: string;
+      courierRating?: number; courierComment?: string; compliments?: string[];
+    },
+  ) =>
+    request<{ id: string; rating: number; courierRating: number | null }>(
+      `/orders/${orderId}/review`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
   chat: (orderId: string) => request<ChatThread>(`/orders/${orderId}/chat`),
 
   sendMessage: (
@@ -246,6 +260,17 @@ export interface OrderSummary {
   placedAt: string | null; deliveredAt: string | null;
 }
 
+export interface CourierProfile {
+  id: string;
+  firstName: string;
+  vehicle: string;
+  photoUrl: string | null;
+  rating: number | null;
+  ratingCount: number;
+  deliveries: number;
+  topCompliments: { code: string; count: number }[];
+}
+
 export interface ChatMessage {
   id: string;
   sender: "CUSTOMER" | "COURIER" | "SYSTEM";
@@ -270,7 +295,14 @@ export interface Tracking {
   requiredAge: number | null; ageVerifiedAt: string | null;
   merchant: { name: string; latitude: number; longitude: number } | null;
   destination: { latitude: number; longitude: number };
-  courier: { firstName: string; rating: number; vehicle: string } | null;
+  courier: {
+    id: string;
+    firstName: string;
+    vehicle: string;
+    rating: number | null;
+    ratingCount: number;
+    photoUrl: string | null;
+  } | null;
   courierPosition: { latitude: number; longitude: number; recordedAt: string } | null;
   courierBearing: number | null;
   route: {

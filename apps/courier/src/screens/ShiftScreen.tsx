@@ -128,6 +128,10 @@ export function ShiftScreen({ navigation }: ScreenProps<"Shift">) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.status}>{active ? "Im Dienst" : "Nicht im Dienst"}</Text>
 
+      <Pressable style={styles.feedbackLink} onPress={() => navigation.navigate("Feedback")}>
+        <Text style={styles.feedbackText}>Deine Bewertungen und dein Profil</Text>
+      </Pressable>
+
       {active ? (
         <>
           <View style={styles.card}>
@@ -194,6 +198,8 @@ const styles = StyleSheet.create({
   rowLabel: { color: theme.muted, fontSize: 14 },
   rowValue: { color: theme.text, fontSize: 14, fontWeight: "600" },
   rowValueHighlight: { color: theme.accent },
+  feedbackLink: { backgroundColor: theme.surface, borderRadius: 12, padding: 16 },
+  feedbackText: { color: theme.text, fontSize: 15, fontWeight: "600" },
   guarantee: { color: theme.muted, fontSize: 12, lineHeight: 18, marginTop: 8 },
   button: {
     backgroundColor: theme.accent,

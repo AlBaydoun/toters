@@ -704,6 +704,7 @@ model MediaAsset {
   /// Media is purged with its conversation, or sooner.
   purgeAfter  DateTime
   messages    Message[]
+  courierPhotos Courier[] @relation("CourierPhoto")
   createdAt   DateTime  @default(now())
 
   @@index([purgeAfter])
@@ -730,6 +731,17 @@ enum VehicleType {
   ON_FOOT
 }
 
+/// Structured praise. Free text about a named worker is an abuse surface and is
+/// hard to act on; a tag is neither.
+enum Compliment {
+  FRIENDLY
+  FAST
+  CAREFUL_WITH_FOOD
+  GOOD_COMMUNICATION
+  FOUND_TRICKY_ADDRESS
+  WENT_ABOVE_AND_BEYOND
+}
+
 enum CourierStatus {
   ONBOARDING
   ACTIVE
@@ -754,6 +766,14 @@ model Courier {
 
   vehicle        VehicleType    @default(E_BIKE)
   status         CourierStatus  @default(ONBOARDING)
+
+  /// Handover photo. Its purpose is identification at the door — the customer
+  /// needs to know the person holding their food is the right person. It is a
+  /// photograph of an identifiable employee, so it is consent-based, purpose-
+  /// limited to that, and withdrawable.
+  photoMediaId   String?
+  photoMedia     MediaAsset?    @relation("CourierPhoto", fields: [photoMediaId], references: [id])
+  photoConsentAt DateTime?
   /// Set once the courier has completed the age-verification training module;
   /// required before they may be assigned age-restricted orders.
   ageCheckCertifiedAt DateTime?
@@ -762,6 +782,7 @@ model Courier {
   ratingCount    Int            @default(0)
 
   orders         Order[]
+  reviews        Review[]
   shifts         CourierShift[]
   assignments    Assignment[]
   locations      CourierLocation[]
@@ -1028,11 +1049,27 @@ model Review {
   merchant     Merchant? @relation(fields: [merchantId], references: [id])
   /// 1–5, matching the rating prompt shown after delivery.
   rating       Int
-  courierRating Int?
   comment      String?
+
+  courierId       String?
+  courier         Courier?     @relation(fields: [courierId], references: [id])
+  courierRating   Int?
+  /// Kept separate from `comment`: one is about the food, the other is about a
+  /// named person, and they have different audiences and retention.
+  courierComment  String?
+  compliments     Compliment[]
+  /// Set when a courier contests feedback. Contested reviews are excluded from
+  /// the aggregate until a human resolves them (Platform Work Directive Art. 11).
+  contestedAt     DateTime?
+  contestReason   String?
+  moderatedAt     DateTime?
+  /// True once a human has upheld the review after a contest or a report.
+  upheld          Boolean      @default(false)
+
   createdAt    DateTime @default(now())
 
   @@index([merchantId, rating])
+  @@index([courierId, createdAt])
 }
 
 // ============================================================================

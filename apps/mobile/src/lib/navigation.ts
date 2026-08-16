@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Checkout: { addressId: string };
   Tracking: { orderId: string };
   Chat: { orderId: string };
+  Review: { orderId: string; courierName: string | null; courierPhotoUrl: string | null };
   AddressPicker: undefined;
   Waitlist: undefined;
 };

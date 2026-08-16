@@ -3,6 +3,7 @@ export * from "./vat.js";
 export * from "./pricing.js";
 export * from "./order-state.js";
 export * from "./authorisation.js";
+export * from "./ratings.js";
 export * from "./wage.js";
 export * from "./age.js";
 export * from "./dispatch.js";

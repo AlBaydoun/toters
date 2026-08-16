@@ -4,6 +4,7 @@ import { t } from "@liefero/shared";
 import { theme } from "../lib/theme";
 import { api, type Tracking } from "../lib/api";
 import { DeliveryMap } from "../components/DeliveryMap";
+import { CourierBadge } from "../components/CourierBadge";
 import type { ScreenProps } from "../lib/navigation";
 
 const STEPS = ["AWAITING_MERCHANT", "PREPARING", "AWAITING_COURIER", "OUT_FOR_DELIVERY", "DELIVERED"];
@@ -86,8 +87,13 @@ export function TrackingScreen({ route, navigation }: ScreenProps<"Tracking">) {
 
       {tracking.courier ? (
         <View style={styles.courierCard}>
-          <Text style={styles.courierName}>{tracking.courier.firstName}</Text>
-          <Text style={styles.courierMeta}>★ {tracking.courier.rating.toFixed(1)} · {tracking.courier.vehicle}</Text>
+          <CourierBadge
+            firstName={tracking.courier.firstName}
+            photoUrl={tracking.courier.photoUrl}
+            rating={tracking.courier.rating}
+            ratingCount={tracking.courier.ratingCount}
+            vehicle={tracking.courier.vehicle}
+          />
           {/* Chat rather than a phone call: neither side ever learns the
               other's number, and a courier on a bike can answer a tap but not
               a call. */}
@@ -108,6 +114,21 @@ export function TrackingScreen({ route, navigation }: ScreenProps<"Tracking">) {
               : `Halte deinen Ausweis bereit — diese Bestellung ist ab ${tracking.requiredAge}.`}
           </Text>
         </View>
+      ) : null}
+
+      {(tracking.status === "DELIVERED" || tracking.status === "SETTLED") ? (
+        <Pressable
+          style={styles.reviewButton}
+          onPress={() =>
+            navigation.navigate("Review", {
+              orderId,
+              courierName: tracking.courier?.firstName ?? null,
+              courierPhotoUrl: tracking.courier?.photoUrl ?? null,
+            })
+          }
+        >
+          <Text style={styles.reviewText}>Bestellung bewerten</Text>
+        </Pressable>
       ) : null}
 
       {tracking.cancellation.customerMayCancel ? (
@@ -155,6 +176,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#FDF3EE",
   },
   ageText: { ...theme.type.caption, color: theme.colors.text },
+  reviewButton: {
+    marginTop: theme.spacing(3),
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing(2),
+    alignItems: "center",
+  },
+  reviewText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
   cancelButton: { marginTop: theme.spacing(3), alignItems: "center", paddingVertical: theme.spacing(2) },
   cancelText: { ...theme.type.body, color: theme.colors.danger },
 });

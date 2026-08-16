@@ -9,6 +9,7 @@ import { OfferScreen } from "./src/screens/OfferScreen";
 import { DeliveryScreen } from "./src/screens/DeliveryScreen";
 import { AgeCheckScreen } from "./src/screens/AgeCheckScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
+import { FeedbackScreen } from "./src/screens/FeedbackScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -37,6 +38,7 @@ export default function App() {
         <Stack.Screen name="Delivery" component={DeliveryScreen} options={{ title: "Lieferung" }} />
         <Stack.Screen name="AgeCheck" component={AgeCheckScreen} options={{ title: "Ausweiskontrolle" }} />
         <Stack.Screen name="Chat" component={ChatScreen} options={{ title: "Chat mit dem Kunden" }} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} options={{ title: "Deine Bewertungen" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

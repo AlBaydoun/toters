@@ -13,6 +13,7 @@ import {
 } from "@liefero/shared";
 import { awardOrderRewards } from "./loyalty.js";
 import { fetchRoute, straightLine } from "../lib/routing.js";
+import { mediaStorage } from "../lib/media.js";
 
 export default async function orderRoutes(app: FastifyInstance) {
   app.get("/orders", { preHandler: app.requireAuth }, async (request) => {
@@ -45,7 +46,13 @@ export default async function orderRoutes(app: FastifyInstance) {
       include: {
         merchant: { select: { name: true, latitude: true, longitude: true } },
         address: true,
-        courier: { select: { id: true, firstName: true, ratingAvg: true, vehicle: true } },
+        courier: {
+          select: {
+            id: true, firstName: true, ratingAvg: true, ratingCount: true,
+            vehicle: true, photoMediaId: true, photoConsentAt: true,
+            photoMedia: { select: { storageKey: true } },
+          },
+        },
         events: { orderBy: { createdAt: "asc" } },
       },
     });
@@ -100,7 +107,24 @@ export default async function orderRoutes(app: FastifyInstance) {
       merchant: order.merchant,
       destination: { latitude: order.address.latitude, longitude: order.address.longitude },
       courier: order.courier
-        ? { firstName: order.courier.firstName, rating: order.courier.ratingAvg, vehicle: order.courier.vehicle }
+        ? {
+            id: order.courier.id,
+            firstName: order.courier.firstName,
+            vehicle: order.courier.vehicle,
+            // Null until enough ratings exist to mean anything — showing "5.0"
+            // off one review flatters nobody and misleads the customer.
+            rating:
+              order.courier.ratingCount >= 5
+                ? Number(order.courier.ratingAvg.toFixed(1))
+                : null,
+            ratingCount: order.courier.ratingCount,
+            // The photo exists so the customer can recognise the person at the
+            // door. Served only where the courier consented to it.
+            photoUrl:
+              order.courier.photoMedia && order.courier.photoConsentAt
+                ? await mediaStorage.signedUrl(order.courier.photoMedia.storageKey, 3600)
+                : null,
+          }
         : null,
       courierPosition,
       /** Heading in degrees, so the marker points where the courier is going. */
@@ -317,53 +341,7 @@ export default async function orderRoutes(app: FastifyInstance) {
     return { verified: true, orderCancelled: false };
   });
 
-  /** The 1–5 rating prompt shown after delivery, feeding support triage. */
-  app.post("/orders/:id/review", { preHandler: app.requireAuth }, async (request) => {
-    const { id } = z.object({ id: z.string() }).parse(request.params);
-    const body = z
-      .object({
-        rating: z.number().int().min(1).max(5),
-        courierRating: z.number().int().min(1).max(5).optional(),
-        comment: z.string().max(2000).optional(),
-      })
-      .parse(request.body);
-
-    const order = await prisma.order.findFirst({ where: { id, userId: request.userId! } });
-    if (!order) throw notFound("Order");
-    if (order.status !== "DELIVERED" && order.status !== "SETTLED") {
-      throw badRequest("NOT_DELIVERED", "You can review an order once it's delivered.");
-    }
-
-    const review = await prisma.$transaction(async (tx) => {
-      const created = await tx.review.create({
-        data: {
-          orderId: order.id,
-          userId: order.userId,
-          merchantId: order.merchantId,
-          rating: body.rating,
-          courierRating: body.courierRating ?? null,
-          comment: body.comment ?? null,
-        },
-      });
-
-      if (order.merchantId) {
-        // Recompute the average from source rather than incrementally, so a
-        // deleted review can never leave the aggregate drifting.
-        const agg = await tx.review.aggregate({
-          where: { merchantId: order.merchantId },
-          _avg: { rating: true },
-          _count: true,
-        });
-        await tx.merchant.update({
-          where: { id: order.merchantId },
-          data: { ratingAvg: agg._avg.rating ?? 0, ratingCount: agg._count },
-        });
-      }
-      return created;
-    });
-
-    return { id: review.id, rating: review.rating };
-  });
+  // Reviews live in modules/reviews.ts — courier feedback has its own rules.
 }
 
 /**
