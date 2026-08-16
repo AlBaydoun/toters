@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import websocket from "@fastify/websocket";
 import rateLimit from "@fastify/rate-limit";
 import { env } from "./lib/env.js";
 import { AppError } from "./lib/errors.js";
@@ -17,6 +18,7 @@ import paymentRoutes from "./modules/payments.js";
 import loyaltyRoutes from "./modules/loyalty.js";
 import shiftRoutes from "./modules/shifts.js";
 import merchantRoutes from "./modules/merchant.js";
+import chatRoutes from "./modules/chat.js";
 import substitutionRoutes from "./modules/substitutions.js";
 
 declare module "fastify" {
@@ -40,6 +42,15 @@ export async function buildServer() {
 
   await app.register(cors, { origin: true, credentials: true });
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute" });
+  await app.register(websocket);
+
+  // Image uploads arrive as raw binary bodies; Fastify needs to be told not to
+  // try parsing them as JSON.
+  app.addContentTypeParser(
+    ["image/jpeg", "image/png", "image/webp"],
+    { parseAs: "buffer" },
+    (_req, body, done) => done(null, body),
+  );
   await app.register(authPlugin);
 
   app.setErrorHandler((error, request, reply) => {
@@ -70,6 +81,7 @@ export async function buildServer() {
   await app.register(loyaltyRoutes, { prefix: "/v1" });
   await app.register(shiftRoutes, { prefix: "/v1" });
   await app.register(merchantRoutes, { prefix: "/v1" });
+  await app.register(chatRoutes, { prefix: "/v1" });
   await app.register(substitutionRoutes, { prefix: "/v1" });
   await app.register(gdprRoutes, { prefix: "/v1" });
 

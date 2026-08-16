@@ -65,6 +65,13 @@ export function DeliveryScreen({ route, navigation }: ScreenProps<"Delivery">) {
         </Pressable>
       ) : null}
 
+      <Pressable
+        style={styles.chatButton}
+        onPress={() => navigation.navigate("Chat", { orderId })}
+      >
+        <Text style={styles.chatText}>Mit dem Kunden chatten</Text>
+      </Pressable>
+
       {status === "AWAITING_COURIER" ? (
         <Pressable style={styles.button} onPress={() => advance("OUT_FOR_DELIVERY")} disabled={busy}>
           <Text style={styles.buttonText}>Abgeholt — losfahren</Text>
@@ -96,4 +103,6 @@ const styles = StyleSheet.create({
   button: { backgroundColor: theme.accent, borderRadius: 12, paddingVertical: 18, alignItems: "center" },
   buttonText: { color: "#0B1512", fontSize: 16, fontWeight: "700" },
   hint: { color: theme.muted, fontSize: 12, lineHeight: 18 },
+  chatButton: { backgroundColor: theme.surface, borderRadius: 12, paddingVertical: 16, alignItems: "center" },
+  chatText: { color: theme.text, fontSize: 16, fontWeight: "600" },
 });

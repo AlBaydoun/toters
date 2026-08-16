@@ -14,7 +14,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "CAMERA"
       ]
     },
     "extra": { "apiBaseUrl": "http://10.0.2.2:4000/v1" }

@@ -4,6 +4,7 @@ export type RootStackParamList = {
   Shift: undefined;
   Offer: { assignmentId: string; orderId: string };
   Delivery: { orderId: string };
+  Chat: { orderId: string };
   AgeCheck: { orderId: string; requiredAge: number };
 };
 

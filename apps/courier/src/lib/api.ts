@@ -65,7 +65,58 @@ export interface AssignmentExplanation {
   humanReviewContact: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  sender: "CUSTOMER" | "COURIER" | "SYSTEM";
+  kind: "TEXT" | "IMAGE" | "QUICK_REPLY" | "LOCATION";
+  body: string | null;
+  mediaUrl: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ChatThread {
+  conversationId: string;
+  closed: boolean;
+  quickReplies: string[];
+  messages: ChatMessage[];
+}
+
+/** Raw binary upload — one file, no other fields, so multipart adds nothing. */
+export async function uploadImage(uri: string, mimeType: string) {
+  const blob = await (await fetch(uri)).blob();
+  const response = await fetch(`${BASE_URL}/media/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": mimeType,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: blob,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = (payload as { error?: { code: string; message: string } }).error;
+    throw new ApiError(err?.code ?? "UPLOAD_FAILED", err?.message ?? "Upload fehlgeschlagen.");
+  }
+  return payload as { mediaId: string; url: string; metadataStripped: boolean };
+}
+
+export function chatSocketUrl(orderId: string) {
+  return `${BASE_URL.replace(/^http/, "ws")}/orders/${orderId}/chat/live`;
+}
+
 export const api = {
+  chat: (orderId: string) => request<ChatThread>(`/orders/${orderId}/chat`),
+
+  sendMessage: (
+    orderId: string,
+    body: { kind?: "TEXT" | "QUICK_REPLY"; body?: string; mediaId?: string },
+  ) =>
+    request<ChatMessage>(`/orders/${orderId}/chat/messages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   currentShift: (courierId: string) => request<ShiftState>(`/shifts/current?courierId=${courierId}`),
 
   startShift: (courierId: string) =>

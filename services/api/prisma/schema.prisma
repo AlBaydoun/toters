@@ -574,6 +574,7 @@ model Order {
   payments       Payment[]
   assignments    Assignment[]
   review         Review?
+  conversation   Conversation?
   promoRedemption PromoRedemption?
   creditEntries  CreditEntry[]
 
@@ -631,6 +632,81 @@ model OrderEvent {
   createdAt DateTime    @default(now())
 
   @@index([orderId, createdAt])
+}
+
+// ============================================================================
+// Chat
+// ============================================================================
+
+enum MessageSender {
+  CUSTOMER
+  COURIER
+  SYSTEM
+}
+
+enum MessageKind {
+  TEXT
+  IMAGE
+  /// Canned phrases, so most exchanges need no typing while riding.
+  QUICK_REPLY
+  LOCATION
+}
+
+/// One conversation per order. Scoping it to the order is what lets us close it
+/// after delivery — an open-ended thread between two strangers is a harassment
+/// vector, and neither party ever sees the other's phone number.
+model Conversation {
+  id          String    @id @default(cuid())
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  /// Set when the order completes. After this, the thread is read-only.
+  closedAt    DateTime?
+  /// Hard deletion date. Chat is retained 90 days for dispute resolution.
+  purgeAfter  DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([purgeAfter])
+}
+
+model Message {
+  id             String        @id @default(cuid())
+  conversationId String
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         MessageSender
+  /// User id or courier id, depending on sender.
+  senderId       String?
+  kind           MessageKind   @default(TEXT)
+  body           String?
+  mediaId        String?
+  media          MediaAsset?   @relation(fields: [mediaId], references: [id])
+  /// Coordinates for LOCATION messages — "I'm at the side entrance".
+  latitude       Float?
+  longitude      Float?
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+/// Uploaded media. EXIF is stripped on ingest: a doorstep photo carries GPS
+/// coordinates and a device identifier, neither of which we want or need.
+model MediaAsset {
+  id          String    @id @default(cuid())
+  /// Storage key, not a public URL — access is always via a signed, expiring link.
+  storageKey  String    @unique
+  contentType String
+  byteSize    Int
+  width       Int?
+  height      Int?
+  uploadedBy  String?
+  uploaderType String?
+  /// Media is purged with its conversation, or sooner.
+  purgeAfter  DateTime
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+
+  @@index([purgeAfter])
 }
 
 // ============================================================================

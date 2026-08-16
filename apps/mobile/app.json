@@ -10,7 +10,7 @@
       "package": "de.liefero.customer",
       "versionCode": 1,
       "adaptiveIcon": { "backgroundColor": "#0B7A5B" },
-      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS"],
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION", "POST_NOTIFICATIONS", "CAMERA"],
       "blockedPermissions": ["ACCESS_BACKGROUND_LOCATION"]
     },
     "locales": { "de": "./locales/de.json", "en": "./locales/en.json" },

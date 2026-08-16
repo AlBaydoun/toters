@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { purgeExpiredChat } from "./chat.js";
 
 /**
  * Storage limitation (GDPR Art. 5(1)(e)). Run daily.
@@ -15,6 +16,8 @@ export const RETENTION = {
   refreshTokenDays: 60,
   /** Audit log. */
   auditLogDays: 365,
+  /** Chat threads and their images — long enough to resolve a dispute. */
+  chatDays: 90,
   /** Orders: §147 AO. Not swept here — this is a floor, not a ceiling. */
   orderYears: 10,
 } as const;
@@ -40,7 +43,11 @@ export async function runRetentionSweep(now = new Date()) {
     prisma.auditLog.deleteMany({ where: { createdAt: { lt: cutoff(RETENTION.auditLogDays) } } }),
   ]);
 
+  const chat = await purgeExpiredChat(now);
+
   return {
+    chatConversations: chat.conversationsDeleted,
+    chatMedia: chat.mediaDeleted,
     courierLocations: locations.count,
     otpChallenges: otps.count,
     refreshTokens: tokens.count,

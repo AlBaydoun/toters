@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Butler: { addressId?: string } | undefined;
   Checkout: { addressId: string };
   Tracking: { orderId: string };
+  Chat: { orderId: string };
   AddressPicker: undefined;
   Waitlist: undefined;
 };

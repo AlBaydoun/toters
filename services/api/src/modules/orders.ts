@@ -12,6 +12,7 @@ import {
   type OrderStatus,
 } from "@liefero/shared";
 import { awardOrderRewards } from "./loyalty.js";
+import { fetchRoute, straightLine } from "../lib/routing.js";
 
 export default async function orderRoutes(app: FastifyInstance) {
   app.get("/orders", { preHandler: app.requireAuth }, async (request) => {
@@ -51,15 +52,41 @@ export default async function orderRoutes(app: FastifyInstance) {
     if (!order) throw notFound("Order");
 
     let courierPosition = null;
+    let route = null;
+    let bearing: number | null = null;
+
     if (order.status === "OUT_FOR_DELIVERY" && order.courierId) {
       // Data minimisation: the customer sees the courier only while the courier
-      // is actually delivering to them, and only the latest fix.
-      const last = await prisma.courierLocation.findFirst({
+      // is actually delivering to them. Two fixes rather than one, so the client
+      // can point the marker the way the courier is actually moving.
+      const fixes = await prisma.courierLocation.findMany({
         where: { courierId: order.courierId },
         orderBy: { recordedAt: "desc" },
+        take: 2,
       });
+
+      const last = fixes[0];
       if (last) {
-        courierPosition = { latitude: last.latitude, longitude: last.longitude, recordedAt: last.recordedAt };
+        courierPosition = {
+          latitude: last.latitude,
+          longitude: last.longitude,
+          recordedAt: last.recordedAt,
+        };
+
+        const previous = fixes[1];
+        if (previous) bearing = bearingBetween(previous, last);
+
+        const destination = { latitude: order.address.latitude, longitude: order.address.longitude };
+        route = await fetchRoute(last, destination);
+      }
+    } else if (order.status === "PREPARING" || order.status === "AWAITING_COURIER") {
+      // Before pickup, show the leg the food still has to travel. It answers
+      // "how far away is my food" without revealing where any courier is.
+      if (order.merchant) {
+        route = straightLine(
+          { latitude: order.merchant.latitude, longitude: order.merchant.longitude },
+          { latitude: order.address.latitude, longitude: order.address.longitude },
+        );
       }
     }
 
@@ -76,6 +103,15 @@ export default async function orderRoutes(app: FastifyInstance) {
         ? { firstName: order.courier.firstName, rating: order.courier.ratingAvg, vehicle: order.courier.vehicle }
         : null,
       courierPosition,
+      /** Heading in degrees, so the marker points where the courier is going. */
+      courierBearing: bearing,
+      route: route
+        ? {
+            points: route.points,
+            distanceMeters: Math.round(route.distanceMeters),
+            durationSeconds: Math.round(route.durationSeconds),
+          }
+        : null,
       timeline: order.events.map((e) => ({ status: e.status, at: e.createdAt })),
       cancellation: cancellationPolicyFor(order.status as OrderStatus),
     };
@@ -435,4 +471,19 @@ async function releaseAuthorisation(orderId: string) {
       });
     });
   }
+}
+
+/** Initial bearing from one point to another, in degrees clockwise from north. */
+function bearingBetween(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const lat1 = toRad(from.latitude);
+  const lat2 = toRad(to.latitude);
+  const dLon = toRad(to.longitude - from.longitude);
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  return (Math.atan2(y, x) * 180) / Math.PI;
 }

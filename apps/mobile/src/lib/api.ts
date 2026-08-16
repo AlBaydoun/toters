@@ -69,6 +69,33 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+/**
+ * Image upload. Sent as a raw binary body rather than multipart: there is
+ * exactly one file and no other fields, so multipart would only add framing.
+ */
+export async function uploadImage(uri: string, mimeType: string) {
+  const blob = await (await fetch(uri)).blob();
+  const response = await fetch(`${BASE_URL}/media/upload`, {
+    method: "POST",
+    headers: {
+      "Content-Type": mimeType,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: blob,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = (payload as { error?: { code: string; message: string } }).error;
+    throw new ApiError(err?.code ?? "UPLOAD_FAILED", err?.message ?? "Upload fehlgeschlagen.");
+  }
+  return payload as { mediaId: string; url: string; metadataStripped: boolean };
+}
+
+export function chatSocketUrl(orderId: string) {
+  return `${BASE_URL.replace(/^http/, "ws")}/orders/${orderId}/chat/live`;
+}
+
 export const api = {
   requestOtp: (destination: string) =>
     request<{ sent: boolean }>("/auth/otp/request", { method: "POST", body: JSON.stringify({ destination }) }),
@@ -122,6 +149,17 @@ export const api = {
     request<{ serviceable: boolean; zoneId: string | null; cityName: string | null }>(
       `/serviceability?latitude=${latitude}&longitude=${longitude}`,
     ),
+
+  chat: (orderId: string) => request<ChatThread>(`/orders/${orderId}/chat`),
+
+  sendMessage: (
+    orderId: string,
+    body: { kind?: "TEXT" | "QUICK_REPLY" | "LOCATION"; body?: string; mediaId?: string; latitude?: number; longitude?: number },
+  ) =>
+    request<ChatMessage>(`/orders/${orderId}/chat/messages`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   createButler: (body: { addressId: string; request: string; budget: number }) =>
     request<{ orderId: string; reference: string; authorisedTotal: number }>("/butler", {
@@ -208,13 +246,38 @@ export interface OrderSummary {
   placedAt: string | null; deliveredAt: string | null;
 }
 
+export interface ChatMessage {
+  id: string;
+  sender: "CUSTOMER" | "COURIER" | "SYSTEM";
+  kind: "TEXT" | "IMAGE" | "QUICK_REPLY" | "LOCATION";
+  body: string | null;
+  mediaUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ChatThread {
+  conversationId: string;
+  closed: boolean;
+  quickReplies: string[];
+  messages: ChatMessage[];
+}
+
 export interface Tracking {
   id: string; reference: string; status: string; etaMinutes: number | null;
   requiredAge: number | null; ageVerifiedAt: string | null;
   merchant: { name: string; latitude: number; longitude: number } | null;
   destination: { latitude: number; longitude: number };
   courier: { firstName: string; rating: number; vehicle: string } | null;
-  courierPosition: { latitude: number; longitude: number } | null;
+  courierPosition: { latitude: number; longitude: number; recordedAt: string } | null;
+  courierBearing: number | null;
+  route: {
+    points: { latitude: number; longitude: number }[];
+    distanceMeters: number;
+    durationSeconds: number;
+  } | null;
   timeline: { status: string; at: string }[];
   cancellation: { tier: string; customerMayCancel: boolean; explanationKey: string };
 }

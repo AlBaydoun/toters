@@ -81,7 +81,13 @@ prep-time capture, the LMIV allergen editor that unblocks selling, availability
 toggles, store pause, and a statement showing commission as an explicit line.
 
 **Customer app** (`apps/mobile`) — discovery, checkout with the full price and
-VAT breakdown, live tracking, Butler.
+VAT breakdown, live map tracking, order chat with photos, Butler.
+
+**Live tracking and chat** — the courier moves on a real map with an animated
+marker and a cycling route from OSRM; customer and courier chat in-thread with
+photo sharing. Neither side ever sees the other's phone number, EXIF is stripped
+from every upload on ingest, image URLs are signed and short-lived, and the
+thread closes after delivery and is purged at 90 days.
 
 **Courier app** (`apps/courier`) — shift control with live earnings and the
 visible wage guarantee, offers with an assignment explanation, delivery flow,
@@ -115,7 +121,11 @@ If you fork this before that commit, take the fix.
 
 ## Not built
 
-- Push notifications and in-app VoIP bridging between customer and courier
+- Push notifications (chat currently relies on a WebSocket plus a poll fallback,
+  so a backgrounded app won't alert)
+- Voice calling — chat covers the need; a bridged-number call path is not built
+- Media storage is in-memory (`MemoryStorage`); swap in an S3-compatible
+  EU-region bucket before any real use
 - No migration has been generated — run `prisma migrate dev` against a live
   Postgres to create one
 - Points expiry is recorded per transaction but nothing sweeps expired points yet
