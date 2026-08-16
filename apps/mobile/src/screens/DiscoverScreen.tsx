@@ -100,6 +100,13 @@ export function DiscoverScreen({ navigation }: ScreenProps<"Discover">) {
         ))}
       </ScrollView>
 
+      <Pressable style={styles.bonusCard} onPress={() => navigation.navigate("Bonus")}>
+        <Text style={styles.bonusTitle}>Bonus</Text>
+        <Text style={styles.bonusSubtitle}>
+          Bei jeder Bestellung Geld zurück — direkt als Guthaben.
+        </Text>
+      </Pressable>
+
       {/* The Butler entry point sits above the store grid: it is the wedge, and
           it is the one thing no competitor offers. */}
       <Pressable style={styles.butlerCard} onPress={() => navigation.navigate("Butler")}>
@@ -158,8 +165,20 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: theme.colors.primary },
   chipText: { ...theme.type.caption, color: theme.colors.text },
   chipTextActive: { color: "#FFFFFF", fontWeight: "600" },
+  bonusCard: {
+    marginHorizontal: theme.spacing(2),
+    marginTop: theme.spacing(2),
+    padding: theme.spacing(2),
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  bonusTitle: { ...theme.type.h2, color: theme.colors.primary },
+  bonusSubtitle: { ...theme.type.caption, color: theme.colors.textMuted, marginTop: 4, lineHeight: 18 },
   butlerCard: {
-    margin: theme.spacing(2),
+    marginHorizontal: theme.spacing(2),
+    marginTop: theme.spacing(1.5),
+    marginBottom: theme.spacing(2),
     padding: theme.spacing(2),
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.primary,

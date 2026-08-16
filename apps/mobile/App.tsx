@@ -10,6 +10,7 @@ import { TrackingScreen } from "./src/screens/TrackingScreen";
 import { ButlerScreen } from "./src/screens/ButlerScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
+import { BonusScreen } from "./src/screens/BonusScreen";
 
 import type { RootStackParamList } from "./src/lib/navigation";
 
@@ -41,6 +42,7 @@ export default function App() {
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ title: "Deine Bestellung" }} />
         <Stack.Screen name="Chat" component={ChatScreen} options={{ title: "Chat mit dem Kurier" }} />
         <Stack.Screen name="Review" component={ReviewScreen} options={{ title: "Bewerten" }} />
+        <Stack.Screen name="Bonus" component={BonusScreen} options={{ title: "Bonus" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

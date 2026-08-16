@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Pressable, ScrollView, ActivityIndicator, TextInput, StyleSheet, Alert } from "react-native";
-import { formatEur, t } from "@liefero/shared";
+import { formatEur, formatRate, t } from "@liefero/shared";
 import { theme } from "../lib/theme";
-import { api, ApiError, type Quote } from "../lib/api";
+import { api, ApiError, type Quote, type CashbackPreview } from "../lib/api";
 import { PriceBlock } from "../components/PriceBlock";
 import type { ScreenProps } from "../lib/navigation";
 
@@ -18,6 +18,7 @@ export function CheckoutScreen({ route, navigation }: ScreenProps<"Checkout">) {
   const [loading, setLoading] = useState(true);
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cashback, setCashback] = useState<CashbackPreview | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +26,20 @@ export function CheckoutScreen({ route, navigation }: ScreenProps<"Checkout">) {
       setLoading(true);
       try {
         const result = await api.quote(addressId, { promoCode: appliedPromo, tipAmount, useCredit });
-        if (!cancelled) { setQuote(result); setError(null); }
+        if (cancelled) return;
+        setQuote(result);
+        setError(null);
+
+        // Shown before they commit. A reward discovered only afterwards does
+        // nothing for the decision the customer is making right now.
+        const earn = await api
+          .cashbackPreview({
+            itemsSubtotal: result.itemsSubtotal,
+            discountTotal: result.discountTotal,
+            creditApplied: result.creditApplied,
+          })
+          .catch(() => null);
+        if (!cancelled) setCashback(earn);
       } catch (e) {
         if (!cancelled) setError(e instanceof ApiError ? e.message : "Preis konnte nicht berechnet werden.");
       } finally {
@@ -128,6 +142,26 @@ export function CheckoutScreen({ route, navigation }: ScreenProps<"Checkout">) {
 
       {quote ? <PriceBlock quote={quote} /> : null}
 
+      {cashback && cashback.amount > 0 ? (
+        <View style={styles.cashback}>
+          <Text style={styles.cashbackAmount}>
+            {formatEur(cashback.amount)} Cashback
+          </Text>
+          <Text style={styles.cashbackNote}>
+            {formatRate(cashback.effectiveBps)} zurück auf diese Bestellung — als Guthaben,
+            sobald geliefert wurde.
+          </Text>
+          {/* Say why the number is lower than the headline rate would imply,
+              rather than letting the customer work it out and feel cheated. */}
+          {cashback.exclusions ? (
+            <Text style={styles.cashbackFine}>{cashback.exclusions}</Text>
+          ) : null}
+          {cashback.capped ? (
+            <Text style={styles.cashbackFine}>Pro Bestellung sind maximal 5,00 € möglich.</Text>
+          ) : null}
+        </View>
+      ) : null}
+
       <Pressable
         style={[styles.placeButton, placing && styles.placeButtonDisabled]}
         onPress={placeOrder}
@@ -188,6 +222,15 @@ const styles = StyleSheet.create({
   ageTitle: { ...theme.type.body, fontWeight: "600", color: theme.colors.danger },
   ageBody: { ...theme.type.caption, color: theme.colors.textMuted, marginTop: 2 },
   error: { ...theme.type.caption, color: theme.colors.danger },
+  cashback: {
+    backgroundColor: "#E9F5F0",
+    borderRadius: theme.radius.md,
+    padding: theme.spacing(1.5),
+    gap: 2,
+  },
+  cashbackAmount: { ...theme.type.body, fontWeight: "700", color: theme.colors.primary },
+  cashbackNote: { ...theme.type.caption, color: theme.colors.textMuted, lineHeight: 18 },
+  cashbackFine: { ...theme.type.caption, fontSize: 12, color: theme.colors.textMuted, marginTop: 2 },
   placeButton: {
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.md,

@@ -12,6 +12,7 @@ import {
   type OrderStatus,
 } from "@liefero/shared";
 import { awardOrderRewards } from "./loyalty.js";
+import { awardCashback } from "./cashback.js";
 import { fetchRoute, straightLine } from "../lib/routing.js";
 import { mediaStorage } from "../lib/media.js";
 
@@ -362,7 +363,11 @@ async function settleDelivery(orderId: string, actorId: string | null) {
     capturedAmount: number;
     requiresNewAuthorisation: boolean;
     pointsAwarded: number | null;
-  } = { captured: false, capturedAmount: 0, requiresNewAuthorisation: false, pointsAwarded: null };
+    cashbackEarned: number | null;
+  } = {
+    captured: false, capturedAmount: 0, requiresNewAuthorisation: false,
+    pointsAwarded: null, cashbackEarned: null,
+  };
 
   const payment = order.payments.find((p) => p.status === "AUTHORISED");
   if (payment) {
@@ -405,6 +410,16 @@ async function settleDelivery(orderId: string, actorId: string | null) {
     result.pointsAwarded = rewards?.pointsAwarded ?? null;
   } catch {
     // Loyalty is not worth failing a delivery over; ops can backfill.
+  }
+
+  // Cashback is earned on delivery, not on placement — paying it out for an
+  // order that never arrived is a refund with extra steps. Isolated for the
+  // same reason as loyalty: a credit failure must not un-deliver an order.
+  try {
+    const cashback = await awardCashback(orderId);
+    result.cashbackEarned = cashback?.amount ?? null;
+  } catch {
+    // Backfillable; the award is idempotent on orderId.
   }
 
   if (result.captured) {

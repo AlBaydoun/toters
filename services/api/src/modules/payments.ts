@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { createPsp, OverCaptureError, type PspRail } from "../lib/psp.js";
 import { applyBps, cancellationPolicyFor, type OrderStatus } from "@liefero/shared";
+import { clawbackCashback } from "./cashback.js";
 
 const psp = createPsp();
 
@@ -270,7 +271,11 @@ export default async function paymentRoutes(app: FastifyInstance) {
       }
     });
 
-    return { refunded: amount, asCredit };
+    // Reverse the cashback that was paid on the refunded goods. Without this,
+    // order-and-refund is a way to mint credit.
+    const clawback = await clawbackCashback(orderId, amount).catch(() => null);
+
+    return { refunded: amount, asCredit, cashbackReversed: clawback?.reversed ?? 0 };
   });
 
   /** Release a hold we will never capture — merchant rejection, no courier found. */

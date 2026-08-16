@@ -133,6 +133,20 @@ async function main() {
     },
   });
 
+  // A platform-funded launch boost. Platform-funded rates are marketing spend
+  // and have to be budgeted as such; merchant-funded ones are the sustainable
+  // kind once the network has bargaining power.
+  await prisma.cashbackCampaign.create({
+    data: {
+      label: "Launch-Wochen: doppeltes Cashback",
+      bonusBps: 300,
+      merchantId: null,
+      fundedBy: "PLATFORM",
+      startsAt: new Date(),
+      endsAt: new Date(Date.now() + 60 * 86_400_000),
+    },
+  });
+
   console.log(`Seeded ${city.name}: zone ${zone.name}, merchant ${merchant.name}`);
   console.log("Merchant console login: chef@kleinekueche.example / liefero-dev-passwort");
 }

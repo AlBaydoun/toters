@@ -107,6 +107,7 @@ model User {
   reviews           Review[]
   devices           Device[]
   creditEntries     CreditEntry[]
+  cashbackAwards    CashbackAward[]
   refreshTokens     RefreshToken[]
 
   createdAt         DateTime  @default(now())
@@ -258,6 +259,7 @@ model Merchant {
   orders          Order[]
   reviews         Review[]
   punchCards      PunchCard[]
+  cashbackCampaigns CashbackCampaign[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -577,6 +579,7 @@ model Order {
   conversation   Conversation?
   promoRedemption PromoRedemption?
   creditEntries  CreditEntry[]
+  cashbackAward  CashbackAward?
 
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -920,6 +923,8 @@ model Payment {
 }
 
 enum CreditReason {
+  CASHBACK
+  CASHBACK_CLAWBACK
   REFUND_GROCERY_ISSUE
   REFUND_CANCELLATION
   GOODWILL
@@ -991,6 +996,49 @@ model PromoRedemption {
   createdAt   DateTime  @default(now())
 
   @@index([promotionId, userId])
+}
+
+/// A cashback boost. Merchant-funded boosts are the sustainable kind — a
+/// platform-funded rate is marketing spend and has to be budgeted as such.
+model CashbackCampaign {
+  id         String   @id @default(cuid())
+  label      String
+  /// Extra basis points on top of the customer's tier rate.
+  bonusBps   Int
+  /// Null = platform-wide.
+  merchantId String?
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+  fundedBy   String   @default("PLATFORM")
+  startsAt   DateTime
+  endsAt     DateTime
+  isActive   Boolean  @default(true)
+  awards     CashbackAward[]
+  createdAt  DateTime @default(now())
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+/// Records what was granted for an order, so a refund can reverse exactly what
+/// was given rather than guessing from the current rate.
+model CashbackAward {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId      String   @unique
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  campaignId   String?
+  campaign     CashbackCampaign? @relation(fields: [campaignId], references: [id])
+  /// Gross cents credited.
+  amount       Int
+  /// The spend the rate was applied to. Needed for proportional clawback.
+  eligibleBase Int
+  effectiveBps Int
+  /// Reversed on refund. Signed positive; net award is amount - clawedBack.
+  clawedBack   Int      @default(0)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model LoyaltyAccount {

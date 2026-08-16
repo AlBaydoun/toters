@@ -150,6 +150,20 @@ export const api = {
       `/serviceability?latitude=${latitude}&longitude=${longitude}`,
     ),
 
+  cashback: () => request<CashbackOverview>("/me/cashback"),
+
+  cashbackPreview: (params: {
+    itemsSubtotal: number; discountTotal?: number; creditApplied?: number; merchantId?: string;
+  }) => {
+    const query = new URLSearchParams({
+      itemsSubtotal: String(params.itemsSubtotal),
+      discountTotal: String(params.discountTotal ?? 0),
+      creditApplied: String(params.creditApplied ?? 0),
+      ...(params.merchantId ? { merchantId: params.merchantId } : {}),
+    });
+    return request<CashbackPreview>(`/cashback/preview?${query.toString()}`);
+  },
+
   courierProfile: (courierId: string) => request<CourierProfile>(`/couriers/${courierId}/profile`),
 
   submitReview: (
@@ -258,6 +272,32 @@ export interface OrderSummary {
   merchantName: string; merchantLogo: string | null;
   grandTotal: number; itemCount: number; etaMinutes: number | null;
   placedAt: string | null; deliveredAt: string | null;
+}
+
+export interface CashbackPreview {
+  amount: number;
+  effectiveBps: number;
+  tierBps: number;
+  campaignBps: number;
+  capped: boolean;
+  campaigns: { id: string; label: string; bonusBps: number }[];
+  exclusions: string | null;
+}
+
+export interface CashbackOverview {
+  balance: number;
+  tier: "BRONZE" | "SILVER" | "GOLD";
+  currentRateBps: number;
+  tierRates: Record<string, number>;
+  capPerOrder: number;
+  lifetimeEarned: number;
+  expiringWithin60Days: number;
+  activeCampaigns: { id: string; label: string; bonusBps: number; merchantId: string | null }[];
+  history: {
+    id: string; orderReference: string; merchantName: string;
+    amount: number; clawedBack: number; net: number;
+    rateBps: number; expiresAt: string; createdAt: string;
+  }[];
 }
 
 export interface CourierProfile {

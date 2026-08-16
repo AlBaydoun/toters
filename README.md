@@ -83,6 +83,11 @@ toggles, store pause, and a statement showing commission as an explicit line.
 **Customer app** (`apps/mobile`) — discovery, checkout with the full price and
 VAT breakdown, live map tracking, order chat with photos, Butler.
 
+**Cashback bonus** — customers earn a percentage of what they actually paid back
+as spendable credit on delivery: 2/3/5% by tier, stackable campaign boosts,
+capped per order, clawed back on refund. Earned on money paid rather than basket
+value, so credit-funded spend cannot mint more credit.
+
 **Courier identity and ratings** — the courier's photo, first name and star
 rating appear during tracking and in chat. Customers rate the food and the
 delivery on one screen, with structured compliments alongside free text.
