@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from "react-native";
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, Pressable } from "react-native";
 import { formatEur, formatRate, TIER_CASHBACK_BPS } from "@liefero/shared";
 import { theme } from "../lib/theme";
 import { api, type CashbackOverview } from "../lib/api";
@@ -20,7 +20,7 @@ const TIER_LABELS: Record<string, string> = {
  * The two things most rewards screens hide, shown here on purpose: what is
  * excluded from earning, and what is about to expire.
  */
-export function BonusScreen() {
+export function BonusScreen({ navigation }: { navigation: { navigate: (s: "Wallet") => void } }) {
   const [data, setData] = useState<CashbackOverview | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -60,6 +60,10 @@ export function BonusScreen() {
           Bei jeder Bestellung bekommst du {formatRate(data.currentRateBps)} zurück.
         </Text>
       </View>
+
+      <Pressable style={styles.topUpLink} onPress={() => navigation.navigate("Wallet")}>
+        <Text style={styles.topUpLinkText}>Guthaben aufladen und Bonus sichern</Text>
+      </Pressable>
 
       {data.expiringWithin60Days > 0 ? (
         <View style={styles.warning}>
@@ -163,6 +167,14 @@ const styles = StyleSheet.create({
   heroLabel: { ...theme.type.caption, color: "#C9E7DC" },
   heroAmount: { fontSize: 40, fontWeight: "700", color: "#FFFFFF", marginTop: 4 },
   heroSub: { ...theme.type.body, color: "#DCEFE7", marginTop: 8, lineHeight: 21 },
+  topUpLink: {
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing(1.75),
+    alignItems: "center",
+  },
+  topUpLinkText: { ...theme.type.body, fontWeight: "600", color: theme.colors.primary },
   warning: {
     backgroundColor: "#FDF3EE",
     borderRadius: theme.radius.md,

@@ -11,6 +11,8 @@ import { ButlerScreen } from "./src/screens/ButlerScreen";
 import { ChatScreen } from "./src/screens/ChatScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { BonusScreen } from "./src/screens/BonusScreen";
+import { WalletScreen } from "./src/screens/WalletScreen";
+import { TipScreen } from "./src/screens/TipScreen";
 
 import type { RootStackParamList } from "./src/lib/navigation";
 
@@ -43,6 +45,8 @@ export default function App() {
         <Stack.Screen name="Chat" component={ChatScreen} options={{ title: "Chat mit dem Kurier" }} />
         <Stack.Screen name="Review" component={ReviewScreen} options={{ title: "Bewerten" }} />
         <Stack.Screen name="Bonus" component={BonusScreen} options={{ title: "Bonus" }} />
+        <Stack.Screen name="Wallet" component={WalletScreen} options={{ title: "Guthaben" }} />
+        <Stack.Screen name="Tip" component={TipScreen} options={{ title: "Trinkgeld" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

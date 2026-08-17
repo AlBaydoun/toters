@@ -83,6 +83,13 @@ toggles, store pause, and a statement showing commission as an explicit line.
 **Customer app** (`apps/mobile`) — discovery, checkout with the full price and
 VAT breakdown, live map tracking, order chat with photos, Butler.
 
+**Wallet** — customers deposit money by card/SEPA/PayPal and spend it on future
+orders, with a bonus of up to 8% on larger top-ups. Balance is split into
+purchased (refundable, permanent) and granted (expires, not cashable) because
+that split is what keeps the feature inside the ZAG limited-network exception
+rather than making us an unlicensed e-money issuer. Tips can also be added up to
+48h after delivery, charged to a card and passed 100% to the courier.
+
 **Cashback bonus** — customers earn a percentage of what they actually paid back
 as spendable credit on delivery: 2/3/5% by tier, stackable campaign boosts,
 capped per order, clawed back on refund. Earned on money paid rather than basket

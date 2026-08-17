@@ -149,7 +149,66 @@ We therefore model couriers as employees from day one:
   explanation of assignment decisions and a human-review path for any automated
   deactivation. `Assignment.reasonCodes` exists to make that answerable.
 
-## 9. Payments — PSD2
+## 9. The wallet — the one that could make us a bank
+
+**This is the highest-consequence item in this document.** Holding customer funds
+that can be spent is, by default, **issuing electronic money**. In Germany that
+requires a BaFin licence under the **ZAG (Zahlungsdiensteaufsichtsgesetz)**, and
+operating without one is a **criminal offence under §63 ZAG** — not a fine, a
+prosecution.
+
+What keeps the wallet legal is the **limited network exception**
+(§2 Abs. 1 Nr. 10 ZAG, transposing PSD2 Art. 3(k)): a balance spendable only on
+the issuer's own goods and services is not e-money.
+
+Three properties preserve that exemption, and all three are enforced in
+`packages/shared/src/wallet.ts` and `services/api/src/modules/wallet.ts`:
+
+1. **Spendable only on our own orders.** There is deliberately no
+   withdraw-to-bank endpoint and no user-to-user transfer. Redeemability for cash
+   at par on demand is the defining characteristic of e-money — building either
+   would forfeit the exemption immediately.
+2. **Purchased balance is tracked separately from granted balance.**
+   - `PURCHASED` — money the customer paid. Refundable to their original payment
+     method, because that is consumer protection, not cash redemption.
+   - `GRANTED` — cashback, top-up bonuses, goodwill. Never refundable as money.
+     Paying it out would convert a marketing accrual into cash redemption.
+   The split is a schema-level decision (`BalanceBucket`), not a report.
+3. **Volume is monitored.** Exceeding **€1,000,000 over twelve months** under the
+   exception triggers a **notification duty to BaFin (§2 Abs. 2 ZAG)**.
+   `assessZagThreshold()` warns at 80% of that, because a BaFin notification is
+   not a same-week task. `GET /admin/wallet/zag-status` reports it.
+
+Spend order matters too: **granted balance drains before purchased**, because
+granted balance expires and purchased does not. Spending the customer's own money
+first while their cashback quietly expired would be indefensible, and in a
+dispute it would look exactly as bad as it is.
+
+Other wallet points:
+
+- **VAT.** The balance is a **multi-purpose voucher** (`Mehrzweckgutschein`,
+  §3 Abs. 15 UStG) — spendable across baskets carrying different rates, so the
+  rate is not fixed at issue. VAT falls on **redemption**, not on top-up. Selling
+  balance therefore books no output VAT; the sale is recognised when the balance
+  is spent on goods.
+- **Accounting.** Purchased balance is a liability (deferred revenue), not
+  revenue. Granted balance is a marketing accrual. Conflating them overstates
+  revenue and is the kind of error that surfaces at audit.
+- **SCA.** A top-up is a card payment. PSD2 applies unchanged.
+- **Balance cap.** €500 per wallet. Partly product sense, partly risk: a large
+  stored balance makes the account a target and makes us look more like a bank.
+
+### Tips
+
+Tips can be added up to 48 hours after delivery. Two rules:
+
+- **100% to the courier**, stated in the UI. Anything else needs disclosing, and
+  skimming tips is both a trust catastrophe and, if undisclosed, a UWG problem.
+- **Never funded from wallet balance.** A tip paid out of cashback we granted
+  would mean paying the courier from our own marketing budget while the customer
+  takes the credit for it.
+
+## 10. Payments — PSD2
 
 - **SCA / 3-D Secure** is mandatory for consumer card payments. We authorise at order
   placement and capture at delivery; if the authorisation expires or the captured amount

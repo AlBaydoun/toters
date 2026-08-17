@@ -131,6 +131,20 @@ export function TrackingScreen({ route, navigation }: ScreenProps<"Tracking">) {
         </Pressable>
       ) : null}
 
+      {(tracking.status === "DELIVERED" || tracking.status === "SETTLED") && tracking.courier ? (
+        <Pressable
+          style={styles.tipButton}
+          onPress={() =>
+            navigation.navigate("Tip", {
+              orderId,
+              courierName: tracking.courier?.firstName ?? null,
+            })
+          }
+        >
+          <Text style={styles.tipText}>Trinkgeld geben</Text>
+        </Pressable>
+      ) : null}
+
       {tracking.cancellation.customerMayCancel ? (
         <Pressable style={styles.cancelButton} onPress={cancel}>
           <Text style={styles.cancelText}>Bestellung stornieren</Text>
@@ -184,6 +198,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   reviewText: { color: "#FFFFFF", fontWeight: "700", fontSize: 16 },
+  tipButton: {
+    marginTop: theme.spacing(1),
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing(2),
+    alignItems: "center",
+  },
+  tipText: { color: theme.colors.text, fontWeight: "600", fontSize: 16 },
   cancelButton: { marginTop: theme.spacing(3), alignItems: "center", paddingVertical: theme.spacing(2) },
   cancelText: { ...theme.type.body, color: theme.colors.danger },
 });

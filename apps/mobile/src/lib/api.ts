@@ -150,6 +150,31 @@ export const api = {
       `/serviceability?latitude=${latitude}&longitude=${longitude}`,
     ),
 
+  wallet: () => request<Wallet>("/me/wallet"),
+
+  topUpQuote: (amount: number) =>
+    request<TopUpQuote & { valid: boolean; reason: string | null }>(
+      `/wallet/topup/quote?amount=${amount}`,
+    ),
+
+  topUp: (amount: number, methodId?: string) =>
+    request<{ topUpId: string; credited: number; requiresAction: boolean }>("/wallet/topup", {
+      method: "POST",
+      body: JSON.stringify({ amount, methodId }),
+    }),
+
+  refundWallet: () =>
+    request<{ refunded: number; remainingGranted: number; explanation: string }>(
+      "/wallet/refund",
+      { method: "POST" },
+    ),
+
+  tipOrder: (orderId: string, amount: number) =>
+    request<{ tipId: string; amount: number; note: string }>(`/orders/${orderId}/tip`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    }),
+
   cashback: () => request<CashbackOverview>("/me/cashback"),
 
   cashbackPreview: (params: {
@@ -272,6 +297,29 @@ export interface OrderSummary {
   merchantName: string; merchantLogo: string | null;
   grandTotal: number; itemCount: number; etaMinutes: number | null;
   placedAt: string | null; deliveredAt: string | null;
+}
+
+export interface TopUpQuote {
+  amount: number;
+  bonus: number;
+  bonusBps: number;
+  credited: number;
+  nextTier: { threshold: number; bonusBps: number; extraNeeded: number } | null;
+}
+
+export interface Wallet {
+  balance: number;
+  purchased: number;
+  granted: number;
+  expiringWithin60Days: number;
+  limits: { minTopUp: number; maxTopUp: number; maxBalance: number };
+  topUpTiers: { threshold: number; bonusBps: number }[];
+  refundable: number;
+  refundExplanation: string;
+  topUps: {
+    id: string; amount: number; bonus: number;
+    credited: number; refunded: number; createdAt: string;
+  }[];
 }
 
 export interface CashbackPreview {

@@ -14,6 +14,8 @@ export type RootStackParamList = {
   Tracking: { orderId: string };
   Chat: { orderId: string };
   Bonus: undefined;
+  Wallet: undefined;
+  Tip: { orderId: string; courierName: string | null };
   Review: { orderId: string; courierName: string | null; courierPhotoUrl: string | null };
   AddressPicker: undefined;
   Waitlist: undefined;

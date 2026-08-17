@@ -88,7 +88,11 @@ model User {
   /// check is always the courier's physical ID verification at handover.
   dateOfBirth       DateTime?
   /// Platform credit ("Guthaben"), gross cents. Grocery refunds land here.
+  /// Split so refundability and expiry can be reasoned about separately.
+  /// creditBalance stays as the spendable total = purchased + granted.
   creditBalance     Int       @default(0)
+  purchasedBalance  Int       @default(0)
+  grantedBalance    Int       @default(0)
   status            UserStatus @default(ACTIVE)
 
   // GDPR
@@ -108,6 +112,8 @@ model User {
   devices           Device[]
   creditEntries     CreditEntry[]
   cashbackAwards    CashbackAward[]
+  topUps            TopUp[]
+  lateTips          LateTip[]
   refreshTokens     RefreshToken[]
 
   createdAt         DateTime  @default(now())
@@ -580,6 +586,7 @@ model Order {
   promoRedemption PromoRedemption?
   creditEntries  CreditEntry[]
   cashbackAward  CashbackAward?
+  lateTips       LateTip[]
 
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -786,6 +793,7 @@ model Courier {
 
   orders         Order[]
   reviews        Review[]
+  lateTips       LateTip[]
   shifts         CourierShift[]
   assignments    Assignment[]
   locations      CourierLocation[]
@@ -886,6 +894,7 @@ model PaymentMethod {
   mandateRef   String?
   isDefault    Boolean           @default(false)
   payments     Payment[]
+  topUps       TopUp[]
   createdAt    DateTime          @default(now())
 
   @@index([userId])
@@ -922,7 +931,18 @@ model Payment {
   @@index([status])
 }
 
+/// Where a unit of balance came from. Drives refundability: purchased balance is
+/// the customer's money and can be paid back to source; granted balance never
+/// can, because paying it out as money is what would make this e-money.
+enum BalanceBucket {
+  PURCHASED
+  GRANTED
+}
+
 enum CreditReason {
+  TOPUP
+  TOPUP_BONUS
+  TOPUP_REFUND
   CASHBACK
   CASHBACK_CLAWBACK
   REFUND_GROCERY_ISSUE
@@ -937,6 +957,7 @@ enum CreditReason {
 /// Append-only ledger for platform credit. Never mutate; always append.
 model CreditEntry {
   id        String       @id @default(cuid())
+  bucket    BalanceBucket @default(GRANTED)
   userId    String
   user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderId   String?
@@ -1039,6 +1060,58 @@ model CashbackAward {
   createdAt    DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+enum TopUpStatus {
+  REQUIRES_ACTION
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+/// A deposit into the wallet. Kept separate from Payment because it funds no
+/// order — it is a prepaid purchase of balance, and its VAT treatment differs:
+/// the balance is a multi-purpose voucher, so VAT falls on redemption.
+model TopUp {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  methodId     String?
+  method       PaymentMethod? @relation(fields: [methodId], references: [id])
+  status       TopUpStatus @default(REQUIRES_ACTION)
+  /// What the customer was charged.
+  amount       Int
+  /// Bonus granted on top. Lands in the GRANTED bucket, never refundable.
+  bonusAmount  Int         @default(0)
+  bonusBps     Int         @default(0)
+  providerRef  String?
+  /// Set when unused purchased balance is paid back.
+  refundedAmount Int       @default(0)
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+/// A tip added after delivery, when the customer actually knows how it went.
+/// Charged separately because the order's payment is already captured.
+model LateTip {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courierId   String
+  courier     Courier  @relation(fields: [courierId], references: [id])
+  amount      Int
+  methodId    String?
+  providerRef String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([courierId, createdAt])
 }
 
 model LoyaltyAccount {

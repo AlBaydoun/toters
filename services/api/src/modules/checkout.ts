@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { orderReference } from "../lib/prisma.js";
 import { badRequest, conflict, notFound } from "../lib/errors.js";
 import { zoneForPoint } from "../lib/geo.js";
+import { spendWallet } from "./wallet.js";
 import {
   buildQuote,
   haversineKm,
@@ -129,22 +130,18 @@ export default async function checkoutRoutes(app: FastifyInstance) {
         },
       });
 
-      // Spend credit against the append-only ledger, never by mutating a balance.
-      if (quote.creditApplied > 0) {
-        await tx.creditEntry.create({
-          data: { userId, orderId: created.id, amount: -quote.creditApplied, reason: "SPEND" },
-        });
-        await tx.user.update({
-          where: { id: userId },
-          data: { creditBalance: { decrement: quote.creditApplied } },
-        });
-      }
-
       await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
       await tx.cart.update({ where: { id: cart.id }, data: { merchantId: null, promoCode: null } });
 
       return created;
     });
+
+    // Spend wallet balance through the shared splitter so granted balance drains
+    // before purchased. Doing it here rather than inside the transaction above
+    // keeps one implementation of the bucket rules instead of two.
+    if (quote.creditApplied > 0) {
+      await spendWallet(userId, quote.creditApplied, order.id);
+    }
 
     reply.code(201);
     return {
